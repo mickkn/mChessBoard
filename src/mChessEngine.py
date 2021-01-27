@@ -1,14 +1,36 @@
-# Mick, Denmark, 2021-01-06
-
+import argparse
 from stockfish import Stockfish
 
-VERSION = "1.0.0"
+APPTITLE = "mChessBoard"
+AUTHOR = "by Mick Kirkegaard"
+VERSION = "v1.0.0"
+DATE = "Jan 01 2021 19:01"
+
+def parser():
+
+    """! @brief     Parser function to get all the arguments """
+
+    # Description string
+    description = "Description: " + APPTITLE + " " + VERSION + " " + DATE + " " + AUTHOR
+    
+    # Construct the argument parse and return the arguments
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description=description)
+    parser.add_argument("-i", "--input", type=str, default="stockfish_20090216_x64.exe",
+                        help="path to stockfish executable")
+    parser.add_argument('--version', action='version', version=APPTITLE + " " + VERSION + " " + DATE + " " + AUTHOR)
+    print('\n' + str(parser.parse_args()) + '\n')
+
+    return parser.parse_args()
+
 
 if __name__ == '__main__':
 
-    print(f"mChessEngine {VERSION} based on StockFish")
+    """! @brief Main function """
 
-    stockfish = Stockfish("stockfish_20090216_x64.exe",
+    # Get the arguments
+    args = parser()
+
+    stockfish = Stockfish(args.input,
                           parameters={
                            "Write Debug Log": "true",
                            "Contempt": 0,
@@ -51,6 +73,7 @@ if __name__ == '__main__':
 
         # Wait for computer input
         computer_move = stockfish.get_best_move_time(1000)
+
         #print(f"Computer move: {computer_move}")
         moves.append(computer_move)
 
