@@ -1,0 +1,2 @@
+stockfish
+pcf8575
