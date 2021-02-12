@@ -53,28 +53,24 @@ class Board:
         self.g = [i for i in pcf_row_gh.port][8:][::-1]
         self.h = [i for i in pcf_row_gh.port][:8][::-1]
 
-    def set_leds(self, led):
+    def set_leds(self, led:str):
 
-        print(led)
-
-        # Get letter as integer and convert to array position 'a' == 97
-        letter = ord(led[0]) - 97 + 8
-
-        # Get digit as integer and convert to array position '1' == 49
-        digit = ord(led[1]) - 49
-
-        print(letter)
-        print(digit)
-
+        # Turn off all leds
         port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
-        port[letter] = False
-        port[digit] = False
 
-        output = [16]
-        output[8:15] = port[8:15][::-1]
-        output[0:7] = port[0:7][::-1]
+        for char in led:
 
-        pcf_leds.port = output
+            if ord('a') <= ord(char) <= ord('h'):
+                pin = abs(ord(char) - 97 - 15)
+                port[pin] = False
+            if ord('A') <= ord(char) <= ord('H'):
+                pin = abs(ord(char) - 65 - 15)
+                port[pin] = False
+            elif ord('1') <= ord(char) <= ord('8'):
+                pin = abs(ord(char) - 49 - 7)
+                port[pin] = False
+
+        pcf_leds.port = port
 
     def display(self):
 
@@ -136,7 +132,9 @@ if __name__ == '__main__':
     while(1):
         board.display()
         time.sleep(0.5)
-        board.set_leds("a1")
+        board.set_leds("abcdefgh12345678")
+        time.sleep(0.5)
+        board.set_leds("")
     exit(0)
 
     # Get the arguments
