@@ -1,5 +1,7 @@
 import argparse
 import time
+import signal
+import sys
 import RPi.GPIO as GPIO
 from stockfish import Stockfish     # https://pypi.org/project/stockfish/
 from pcf8575 import PCF8575         # https://pypi.org/project/pcf8575/
@@ -19,8 +21,8 @@ MCB_I2C_LEDS_ADDRESS = 0x24
 
 MCB_BUT_WHITE_CLOSE = 17    # Closest to WHITE side
 MCB_BUT_WHITE_MID = 27      # Middle close to WHITE side
-MCB_BUT_BLACK_MID = 22      # Middle close to BLACK side
-MCB_BUT_BLACK_CLOSE = 23    # Closest to BLACK side
+MCB_BUT_BLACK_MID = 23      # Middle close to BLACK side
+MCB_BUT_BLACK_CLOSE = 22    # Closest to BLACK side
 
 """! @brief     Board fields and leds"""
 pcf_row_ab = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_AB_ADDRESS)
@@ -30,6 +32,13 @@ pcf_row_gh = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_GH_ADDRESS)
 pcf_leds = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_LEDS_ADDRESS)
 
 """! @brief     Other defines """
+
+def signal_handler(sig, frame):
+
+    """! @brief    Exit function"""
+
+    GPIO.cleanup()
+    sys.exit(0)
 
 class Board:
 
@@ -57,6 +66,14 @@ class Board:
         GPIO.setup(MCB_BUT_WHITE_MID, GPIO.IN)
         GPIO.setup(MCB_BUT_BLACK_MID, GPIO.IN)
         GPIO.setup(MCB_BUT_BLACK_CLOSE, GPIO.IN)
+
+        GPIO.add_event_detect(MCB_BUT_WHITE_CLOSE, GPIO.FALLING, callback=self.test_but, bouncetime=300)
+        GPIO.add_event_detect(MCB_BUT_WHITE_MID, GPIO.FALLING, callback=self.test_but, bouncetime=300)
+        GPIO.add_event_detect(MCB_BUT_BLACK_MID, GPIO.FALLING, callback=self.test_but, bouncetime=300)
+        GPIO.add_event_detect(MCB_BUT_BLACK_CLOSE, GPIO.FALLING, callback=self.test_but, bouncetime=300)
+
+    def test_but(self, channel):
+        print(f"Pressed something ({channel})")
 
     def read_fields(self):
 
@@ -147,14 +164,15 @@ if __name__ == '__main__':
     #board.read()
     #print(len(board.a))
     #print(board.a[7])
-    while(1):
-        board.display()
-        time.sleep(0.5)
-    exit(0)
+    #while(1):
+    #    board.display()
+    #    time.sleep(0.5)
+    #exit(0)
 
     # Get the arguments
     args = parser()
 
+    """
     try:
         stockfish = Stockfish(args.input,
                             parameters={
@@ -204,4 +222,11 @@ if __name__ == '__main__':
 
         #print(f"Computer move: {computer_move}")
         moves.append(computer_move)
+
+    """
+
+    print("Test")
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.pause()
 
