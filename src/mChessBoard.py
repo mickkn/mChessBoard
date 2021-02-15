@@ -1,5 +1,6 @@
 import argparse
 import time
+import RPi.GPIO as GPIO
 from stockfish import Stockfish     # https://pypi.org/project/stockfish/
 from pcf8575 import PCF8575         # https://pypi.org/project/pcf8575/
 
@@ -16,6 +17,11 @@ MCB_I2C_ROW_EF_ADDRESS = 0x21
 MCB_I2C_ROW_GH_ADDRESS = 0x20
 MCB_I2C_LEDS_ADDRESS = 0x24
 
+MCB_BUT_WHITE_CLOSE = 17    # Closest to WHITE side
+MCB_BUT_WHITE_MID = 27      # Middle close to WHITE side
+MCB_BUT_BLACK_MID = 22      # Middle close to BLACK side
+MCB_BUT_BLACK_CLOSE = 23    # Closest to BLACK side
+
 """! @brief     Board fields and leds"""
 pcf_row_ab = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_AB_ADDRESS)
 pcf_row_cd = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_CD_ADDRESS)
@@ -29,6 +35,7 @@ class Board:
 
     def __init__(self):
 
+        # Initialize all fields to False
         self.a = [False, False, False, False, False, False, False, False]
         self.b = [False, False, False, False, False, False, False, False]
         self.c = [False, False, False, False, False, False, False, False]
@@ -38,8 +45,18 @@ class Board:
         self.g = [False, False, False, False, False, False, False, False]
         self.h = [False, False, False, False, False, False, False, False]
 
-        self.leds_letters = [True, True, True, True, True, True, True, True]
-        self.leds_digits = [True, True, True, True, True, True, True, True]
+        # Set all inputs high on init
+        pcf_row_ab.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+        pcf_row_cd.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+        pcf_row_ef.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+        pcf_row_gh.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+
+        # Init buttons
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(MCB_BUT_WHITE_CLOSE, GPIO.IN)
+        GPIO.setup(MCB_BUT_WHITE_MID, GPIO.IN)
+        GPIO.setup(MCB_BUT_BLACK_MID, GPIO.IN)
+        GPIO.setup(MCB_BUT_BLACK_CLOSE, GPIO.IN)
 
     def read_fields(self):
 
@@ -74,26 +91,27 @@ class Board:
 
     def display(self):
 
+        # Read all fields
         self.read_fields()
 
-        # Test print out
+        # Display status of all fields.
         print(f"  a   b   c   d   e   f   g   h    ")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[7] else 'p'} | {' ' if self.b[7] else 'p'} | {' ' if self.c[7] else 'p'} | {' ' if self.d[7] else 'p'} | {' ' if self.e[7] else 'p'} | {' ' if self.f[7] else 'p'} | {' ' if self.g[7] else 'p'} | {' ' if self.h[7] else 'p'} | 8")
+        print(f"| {'p' if self.a[7] else '-'} | {'p' if self.b[7] else '-'} | {'p' if self.c[7] else '-'} | {'p' if self.d[7] else '-'} | {'p' if self.e[7] else '-'} | {'p' if self.f[7] else '-'} | {'p' if self.g[7] else '-'} | {'p' if self.h[7] else '-'} | 8")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[6] else 'p'} | {' ' if self.b[6] else 'p'} | {' ' if self.c[6] else 'p'} | {' ' if self.d[6] else 'p'} | {' ' if self.e[6] else 'p'} | {' ' if self.f[6] else 'p'} | {' ' if self.g[6] else 'p'} | {' ' if self.h[6] else 'p'} | 7")
+        print(f"| {'p' if self.a[6] else '-'} | {'p' if self.b[6] else '-'} | {'p' if self.c[6] else '-'} | {'p' if self.d[6] else '-'} | {'p' if self.e[6] else '-'} | {'p' if self.f[6] else '-'} | {'p' if self.g[6] else '-'} | {'p' if self.h[6] else '-'} | 7")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[5] else 'p'} | {' ' if self.b[5] else 'p'} | {' ' if self.c[5] else 'p'} | {' ' if self.d[5] else 'p'} | {' ' if self.e[5] else 'p'} | {' ' if self.f[5] else 'p'} | {' ' if self.g[5] else 'p'} | {' ' if self.h[5] else 'p'} | 6")
+        print(f"| {'p' if self.a[5] else '-'} | {'p' if self.b[5] else '-'} | {'p' if self.c[5] else '-'} | {'p' if self.d[5] else '-'} | {'p' if self.e[5] else '-'} | {'p' if self.f[5] else '-'} | {'p' if self.g[5] else '-'} | {'p' if self.h[5] else '-'} | 6")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[4] else 'p'} | {' ' if self.b[4] else 'p'} | {' ' if self.c[4] else 'p'} | {' ' if self.d[4] else 'p'} | {' ' if self.e[4] else 'p'} | {' ' if self.f[4] else 'p'} | {' ' if self.g[4] else 'p'} | {' ' if self.h[4] else 'p'} | 5")
+        print(f"| {'p' if self.a[4] else '-'} | {'p' if self.b[4] else '-'} | {'p' if self.c[4] else '-'} | {'p' if self.d[4] else '-'} | {'p' if self.e[4] else '-'} | {'p' if self.f[4] else '-'} | {'p' if self.g[4] else '-'} | {'p' if self.h[4] else '-'} | 5")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[3] else 'p'} | {' ' if self.b[3] else 'p'} | {' ' if self.c[3] else 'p'} | {' ' if self.d[3] else 'p'} | {' ' if self.e[3] else 'p'} | {' ' if self.f[3] else 'p'} | {' ' if self.g[3] else 'p'} | {' ' if self.h[3] else 'p'} | 4")
+        print(f"| {'p' if self.a[3] else '-'} | {'p' if self.b[3] else '-'} | {'p' if self.c[3] else '-'} | {'p' if self.d[3] else '-'} | {'p' if self.e[3] else '-'} | {'p' if self.f[3] else '-'} | {'p' if self.g[3] else '-'} | {'p' if self.h[3] else '-'} | 4")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[2] else 'p'} | {' ' if self.b[2] else 'p'} | {' ' if self.c[2] else 'p'} | {' ' if self.d[2] else 'p'} | {' ' if self.e[2] else 'p'} | {' ' if self.f[2] else 'p'} | {' ' if self.g[2] else 'p'} | {' ' if self.h[2] else 'p'} | 3")
+        print(f"| {'p' if self.a[2] else '-'} | {'p' if self.b[2] else '-'} | {'p' if self.c[2] else '-'} | {'p' if self.d[2] else '-'} | {'p' if self.e[2] else '-'} | {'p' if self.f[2] else '-'} | {'p' if self.g[2] else '-'} | {'p' if self.h[2] else '-'} | 3")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[1] else 'p'} | {' ' if self.b[1] else 'p'} | {' ' if self.c[1] else 'p'} | {' ' if self.d[1] else 'p'} | {' ' if self.e[1] else 'p'} | {' ' if self.f[1] else 'p'} | {' ' if self.g[1] else 'p'} | {' ' if self.h[1] else 'p'} | 2")
+        print(f"| {'p' if self.a[1] else '-'} | {'p' if self.b[1] else '-'} | {'p' if self.c[1] else '-'} | {'p' if self.d[1] else '-'} | {'p' if self.e[1] else '-'} | {'p' if self.f[1] else '-'} | {'p' if self.g[1] else '-'} | {'p' if self.h[1] else '-'} | 2")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[0] else 'p'} | {' ' if self.b[0] else 'p'} | {' ' if self.c[0] else 'p'} | {' ' if self.d[0] else 'p'} | {' ' if self.e[0] else 'p'} | {' ' if self.f[0] else 'p'} | {' ' if self.g[0] else 'p'} | {' ' if self.h[0] else 'p'} | 1")
+        print(f"| {'p' if self.a[0] else '-'} | {'p' if self.b[0] else '-'} | {'p' if self.c[0] else '-'} | {'p' if self.d[0] else '-'} | {'p' if self.e[0] else '-'} | {'p' if self.f[0] else '-'} | {'p' if self.g[0] else '-'} | {'p' if self.h[0] else '-'} | 1")
         print(f"+---+---+---+---+---+---+---+---+  ")
 
 
@@ -132,9 +150,6 @@ if __name__ == '__main__':
     while(1):
         board.display()
         time.sleep(0.5)
-        board.set_leds("abcdefgh12345678")
-        time.sleep(0.5)
-        board.set_leds("")
     exit(0)
 
     # Get the arguments
