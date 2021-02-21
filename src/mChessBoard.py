@@ -89,6 +89,8 @@ class ChessBoard(StateMachine):
         self.g = [False, False, False, False, False, False, False, False]
         self.h = [False, False, False, False, False, False, False, False]
 
+        self.board = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
+
         self.a_prev = [False, False, False, False, False, False, False, False]
         self.b_prev = [False, False, False, False, False, False, False, False]
         self.c_prev = [False, False, False, False, False, False, False, False]
@@ -97,6 +99,8 @@ class ChessBoard(StateMachine):
         self.f_prev = [False, False, False, False, False, False, False, False]
         self.g_prev = [False, False, False, False, False, False, False, False]
         self.h_prev = [False, False, False, False, False, False, False, False]
+
+        self.board_prev = [self.a_prev, self.b_prev, self.c_prev, self.d_prev, self.e_prev, self.f_prev, self.g_prev, self.h_prev]
 
         # Set all inputs high on init
         pcf_row_ab.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
@@ -205,9 +209,6 @@ class ChessBoard(StateMachine):
         dance_out()
         dance_in()
 
-    def choose_versus(self):
-        print("lol")
-
     def read_fields(self):
 
         # Read the PCF8575 boards (this is done with the assumption that a1 = p00 etc. reason for reversion)
@@ -219,6 +220,30 @@ class ChessBoard(StateMachine):
         self.f = [i for i in pcf_row_ef.port][:8][::-1]
         self.g = [i for i in pcf_row_gh.port][8:][::-1]
         self.h = [i for i in pcf_row_gh.port][:8][::-1]
+
+        self.board = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
+
+    def get_lifted_field(self):
+
+        self.read_fields()
+
+    def get_placed_field(self):
+
+        self.read_fields()
+
+    def hint_ai_move(self, move:str):
+
+        self.set_leds(move[0] + move[1])
+        time.sleep(1.5)
+        self.set_leds(move[2] + move[3])
+        time.sleep(0.1)
+
+    def is_ai_move_done(self, move:str):
+
+        if self.board[ord(move[0]) - 97][ord(move[1]) - 49] == True and self.board[ord(move[2]) - 97][ord(move[3]) - 49] == False:
+            return True
+        else:
+            return False
 
     def set_leds(self, led:str):
 
@@ -307,6 +332,10 @@ if __name__ == "__main__":
     first_entry = True
     current_state = None
 
+    move_hint_ai = False
+    move_stockfish = ""
+    moves = []
+
     while True:
 
         # Set flag the state has changed
@@ -322,6 +351,9 @@ if __name__ == "__main__":
 
             board.startup_leds()
             board.add_button_events()
+
+            move_hint_ai = False
+            move_stockfish = ""
 
             # Set next state
             fsm.go_to_versus()
@@ -447,19 +479,45 @@ if __name__ == "__main__":
                                         "UCI_Chess960": "false",
                                       }
                                      )
+                print(stockfish.get_board_visual())
+
+                print(board.board)
             
             if GPIO.event_detected(MCB_ROW_AB_IO):
+                print("Event: MCB_ROW_AB_IO")
                 board.read_fields()
 
             if GPIO.event_detected(MCB_ROW_CD_IO):
+                print("Event: MCB_ROW_AB_IO")
                 board.read_fields()
 
             if GPIO.event_detected(MCB_ROW_EF_IO):
+                print("Event: MCB_ROW_AB_IO")
                 board.read_fields()
 
-            if GPIO.event_detected(MCB_ROW_GH_IO): 
+            if GPIO.event_detected(MCB_ROW_GH_IO):
+                print("Event: MCB_ROW_AB_IO")
                 board.read_fields()
 
+            if GPIO.event_detected(MCB_BUT_CONFIRM):
+                print("Event: Hint or AI move")
+                move_stockfish = stockfish.get_best_move()
+                move_hint_ai = True
+
+            # Show HINT move
+            if move_hint_ai:
+                board.hint_ai_move(move_stockfish)
+
+            # Confirm AI/hint move
+            if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) and move_hint_ai:
+                if board.is_ai_move_done(move_stockfish):
+                    move_hint_ai = False
+                    if stockfish.is_move_correct(move_stockfish):
+                        moves.append(move_stockfish)
+                        stockfish.set_position(moves)
+                        move_stockfish = ""
+
+            # Reset
             if not GPIO.input(MCB_BUT_WHITE) and not GPIO.input(MCB_BUT_BLACK) and not GPIO.input(MCB_BUT_CONFIRM) and not GPIO.input(MCB_BUT_BACK):
                 print("Exitting")
                 board.remove_button_events()
