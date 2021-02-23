@@ -1,6 +1,6 @@
 ### Concept ###
 
-Wishing to create a chess compter which is not dependent on push switches or special chess pieces with magnets and stuff like that, so the chess board is based on photoresistors as sensors, which of course will depend on the environment light, but most chess pieces should work with the board.
+Wishing to create a chess computer which is not dependent on push switches or special chess pieces with magnets and stuff like that, so the chess board is based on photoresistors as sensors, which of course will depend on the environment light, but most chess pieces should work with the board.
 
 ![Hardware Block Definition Diagram](hardware_bdd.png)
 
