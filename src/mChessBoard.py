@@ -4,6 +4,7 @@ from signal import signal, SIGINT
 import sys
 import threading
 import RPi.GPIO as GPIO
+import numpy
 
 from statemachine import StateMachine, State
 from stockfish import Stockfish     # https://pypi.org/project/stockfish/
@@ -86,7 +87,7 @@ class ChessBoard(StateMachine):
         self.g = [False, False, False, False, False, False, False, False]
         self.h = [False, False, False, False, False, False, False, False]
 
-        self.board = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
+        self.board = numpy.array([self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h])
 
         self.a_prev = [False, False, False, False, False, False, False, False]
         self.b_prev = [False, False, False, False, False, False, False, False]
@@ -97,7 +98,7 @@ class ChessBoard(StateMachine):
         self.g_prev = [False, False, False, False, False, False, False, False]
         self.h_prev = [False, False, False, False, False, False, False, False]
 
-        self.board_prev = [self.a_prev, self.b_prev, self.c_prev, self.d_prev, self.e_prev, self.f_prev, self.g_prev, self.h_prev]
+        self.board_prev = numpy.array([self.a_prev, self.b_prev, self.c_prev, self.d_prev, self.e_prev, self.f_prev, self.g_prev, self.h_prev])
 
         # Set all inputs high on init
         pcf_row_ab.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
@@ -154,6 +155,11 @@ class ChessBoard(StateMachine):
             (self.f == [False, False, True, True, True, True, False, False]) and \
             (self.g == [False, False, True, True, True, True, False, False]) and \
             (self.h == [False, False, True, True, True, True, False, False]):
+
+            # Setup board
+            self.board = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
+            self.board_prev = [self.a_prev, self.b_prev, self.c_prev, self.d_prev, self.e_prev, self.f_prev, self.g_prev, self.h_prev]
+
             return True
         else:
             return False
@@ -220,30 +226,52 @@ class ChessBoard(StateMachine):
 
         self.board = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
 
-    def get_lifted_field(self):
+    def determine_field_event(self):
+
+        """! Determine what happends on the field
+        
+        @return field string and lift/place state
+        """
+
+        print("Event: Field change")
+
+        print(numpy.where(self.board != self.board_prev))
 
         self.read_fields()
 
-    def get_placed_field(self):
 
-        self.read_fields()
 
     def hint_ai_move(self, toggle:bool, move:str):
+
+        """! Indicate what the AI wants """
 
         if toggle:
             self.set_leds(move[0] + move[1])
         else:
             self.set_leds(move[0] + move[1] + move[2] + move[3])
     
-    def hint_ai_move_done(self, move:str):
+    def move_done(self, move:str):
+
+        """! Set leds when move is done """
 
         self.set_leds(move[2] + move[3])
 
-    def castling(self, move:str):
+    def castling(self, move:str, moves:list):
         
-        """! @brief     Check move for castling """
+        """! @brief     Check move for castling 
+        
+        @param move     The current move to check
+        """
 
-        if move == "e1g1" or move == "e1c1" or move == "e8g8" or move == "e8c8":
+        black = True
+        white = True
+
+        # If any king has moved, they cannot castle
+        for m in moves:
+            if (m[0] + m[1]) == "e1": white = False
+            if (m[0] + m[1]) == "e8": black = False
+
+        if (move == "e1g1" or move == "e1c1" and white) or (move == "e8g8" or move == "e8c8" and black):
             return True
         else: 
             return False
@@ -522,22 +550,12 @@ if __name__ == "__main__":
                 print(stockfish.get_board_visual())
                 #print(board.board)
             
-            if GPIO.event_detected(MCB_ROW_AB_IO):
+            # Handle move on board
+            if GPIO.event_detected(MCB_ROW_AB_IO) or GPIO.event_detected(MCB_ROW_CD_IO) or GPIO.event_detected(MCB_ROW_EF_IO) or GPIO.event_detected(MCB_ROW_GH_IO):
                 if DEBUG: print("Event: MCB_ROW_AB_IO")
-                board.read_fields()
+                board.determine_field_event()
 
-            if GPIO.event_detected(MCB_ROW_CD_IO):
-                if DEBUG: print("Event: MCB_ROW_AB_IO")
-                board.read_fields()
-
-            if GPIO.event_detected(MCB_ROW_EF_IO):
-                if DEBUG: print("Event: MCB_ROW_AB_IO")
-                board.read_fields()
-
-            if GPIO.event_detected(MCB_ROW_GH_IO):
-                if DEBUG: print("Event: MCB_ROW_AB_IO")
-                board.read_fields()
-
+            # Is confirm pressed?
             if GPIO.event_detected(MCB_BUT_CONFIRM):
                 print("Event: Hint or AI move")
                 move_stockfish = stockfish.get_best_move()
@@ -564,7 +582,7 @@ if __name__ == "__main__":
             # Confirm AI/hint move
             if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
                 print("Confirm AI move")
-                board.hint_ai_move_done(move_stockfish)
+                board.move_done(move_stockfish)
                 if DEBUG: board.display()
                 if board.is_ai_move_done(move_stockfish):
                     if stockfish.is_move_correct(move_stockfish):
