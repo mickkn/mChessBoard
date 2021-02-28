@@ -2,24 +2,22 @@ import argparse
 import time
 from signal import signal, SIGINT
 import sys
-import threading
 import RPi.GPIO as GPIO
-import numpy
 
 from statemachine import StateMachine, State
-from stockfish import Stockfish     # https://pypi.org/project/stockfish/
-from pcf8575 import PCF8575         # https://pypi.org/project/pcf8575/
+from stockfish import Stockfish  # https://pypi.org/project/stockfish/
+from pcf8575 import PCF8575  # https://pypi.org/project/pcf8575/
 
-APPTITLE    = "mChessBoard"
-AUTHOR      = "by Mick Kirkegaard"
-VERSION     = "v1.0.0"
-DATE        = "Jan 01 2021 19:01"
+APP_TITLE = "mChessBoard"
+AUTHOR = "by Mick Kirkegaard"
+VERSION = "v1.0.0"
+DATE = "Jan 01 2021 19:01"
 
 """! @brief     Play defines """
 MCB_PLAY_DIFF_MAX = 8
 MCB_PLAY_DIFF_MIN = 1
-MCB_PLAY_AI_LED_TOGGLE_TIME = 0.5 # sec
-MCB_PLAY_CHECKMATE_LED_TOGGLE_TIME = 0.2 # sec
+MCB_PLAY_AI_LED_TOGGLE_TIME = 0.5  # sec
+MCB_PLAY_CHECKMATE_LED_TOGGLE_TIME = 0.2  # sec
 
 """! @brief     Board defines """
 MCB_I2C_PORT_NUM = 1
@@ -27,21 +25,21 @@ MCB_I2C_ROW_AB_ADDRESS = 0x23
 MCB_I2C_ROW_CD_ADDRESS = 0x22
 MCB_I2C_ROW_EF_ADDRESS = 0x21
 MCB_I2C_ROW_GH_ADDRESS = 0x20
-MCB_I2C_LEDS_ADDRESS   = 0x24
+MCB_I2C_LEDS_ADDRESS = 0x24
 
-MCB_BUT_WHITE       = 17        # Closest to WHITE side
-MCB_BUT_CONFIRM     = 27        # Middle close to WHITE side
-MCB_BUT_BACK        = 23        # Middle close to BLACK side
-MCB_BUT_BLACK       = 22        # Closest to BLACK side
-MCB_BUT_DEBOUNCE    = 250       # Button debounce
-MCB_FIELD_DEBOUNCE  = 100       # Field debounce
+MCB_BUT_WHITE = 17  # Closest to WHITE side
+MCB_BUT_CONFIRM = 27  # Middle close to WHITE side
+MCB_BUT_BACK = 23  # Middle close to BLACK side
+MCB_BUT_BLACK = 22  # Closest to BLACK side
+MCB_BUT_DEBOUNCE = 250  # Button debounce
+MCB_FIELD_DEBOUNCE = 100  # Field debounce
 
 """! @brief     Board fields and leds"""
 pcf_row_ab = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_AB_ADDRESS)
 pcf_row_cd = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_CD_ADDRESS)
 pcf_row_ef = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_EF_ADDRESS)
 pcf_row_gh = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_GH_ADDRESS)
-pcf_leds   = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_LEDS_ADDRESS)
+pcf_leds = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_LEDS_ADDRESS)
 
 MCB_ROW_AB_IO = 6
 MCB_ROW_CD_IO = 13
@@ -54,129 +52,156 @@ DEBUG = True
 
 """! @brief     Global variables """
 
-def parser():
 
+def parser():
     """! @brief     Parser function to get all the arguments """
 
     # Description string
-    description = "Description: " + APPTITLE + " " + VERSION + " " + DATE + " " + AUTHOR
-    
-    # Construct the argument parse and return the arguments
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description=description)
-    
-    parser.add_argument("-i", "--input", type=str, default="/home/pi/mChessBoard/src/stockfish-rpiz",
-                        help="path to stockfish executable")
-    parser.add_argument('--version', action='version', version=APPTITLE + " " + VERSION + " " + DATE + " " + AUTHOR)
-    
-    print('\n' + str(parser.parse_args()) + '\n')
+    description = "Description: " + APP_TITLE + " " + VERSION + " " + DATE + " " + AUTHOR
 
-    return parser.parse_args()
+    # Construct the argument parse and return the arguments
+    args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description=description)
+
+    args.add_argument("-i", "--input", type=str, default="/home/pi/mChessBoard/src/stockfish-rpiz",
+                        help="path to stockfish executable")
+    args.add_argument('--version', action='version', version=APPTITLE + " " + VERSION + " " + DATE + " " + AUTHOR)
+
+    print('\n' + str(args.parse_args()) + '\n')
+
+    return args.parse_args()
+
 
 class ChessBoard(StateMachine):
 
     def __init__(self):
 
+        """! Init the board """
+        
         # Initialize all fields to False
-        self.a = [False, False, False, False, False, False, False, False]
-        self.b = [False, False, False, False, False, False, False, False]
-        self.c = [False, False, False, False, False, False, False, False]
-        self.d = [False, False, False, False, False, False, False, False]
-        self.e = [False, False, False, False, False, False, False, False]
-        self.f = [False, False, False, False, False, False, False, False]
-        self.g = [False, False, False, False, False, False, False, False]
-        self.h = [False, False, False, False, False, False, False, False]
-
+        default = [False] * 8
+        self.a = self.b = self.c = self.d = self.e = self.f = self.g = self.h = default
+        
+        # Declare board 2D lists
         self.board_current = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
         self.board_prev = self.board_current
 
-        # Setup board
+        # Default board setup (False == Place piece)
         self.setup = [False, False, True, True, True, True, False, False]
-        self.board_setup = [self.setup, self.setup, self.setup, self.setup, self.setup, self.setup, self.setup, self.setup]
+        self.board_setup = [self.setup] * 8
 
         # Set all inputs high on init
-        pcf_row_ab.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
-        pcf_row_cd.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
-        pcf_row_ef.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
-        pcf_row_gh.port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+        pcf_row_ab.port = pcf_row_cd.port = pcf_row_ef.port = pcf_row_gh.port = [True] * 16
 
-        # Set GPIO mode
+        # Setup GPIO pin mode
         GPIO.setmode(GPIO.BCM)
 
-        # Init field interrupts
-        GPIO.setup(MCB_ROW_AB_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_ROW_CD_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-        # Init buttons
+        # Init buttons pin mode
         GPIO.setup(MCB_BUT_WHITE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(MCB_BUT_CONFIRM, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(MCB_BUT_BACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(MCB_BUT_BLACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
+        # Init fields pin mode
+        GPIO.setup(MCB_ROW_AB_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(MCB_ROW_CD_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
     def add_button_events(self):
+
+        """! Add events to all buttons """
+        
+        # Remove the events before adding them again
+        self.remove_button_events()
+
+        # Add button events
         GPIO.add_event_detect(MCB_BUT_WHITE, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
         GPIO.add_event_detect(MCB_BUT_CONFIRM, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
         GPIO.add_event_detect(MCB_BUT_BACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
         GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
 
     def remove_button_events(self):
+
+        """! Remove events from all buttons """
+
         GPIO.remove_event_detect(MCB_BUT_WHITE)
         GPIO.remove_event_detect(MCB_BUT_CONFIRM)
         GPIO.remove_event_detect(MCB_BUT_BACK)
         GPIO.remove_event_detect(MCB_BUT_BLACK)
 
     def add_field_events(self):
+
+        """! Add events to all chess fields """
+
+        # Remove the events before adding them again
+        self.remove_field_events()
+
+        # Add field events
         GPIO.add_event_detect(MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
         GPIO.add_event_detect(MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
         GPIO.add_event_detect(MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
         GPIO.add_event_detect(MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
 
     def remove_field_events(self):
+
+        """! Remove events from all chess fields """
+
         GPIO.remove_event_detect(MCB_ROW_AB_IO)
         GPIO.remove_event_detect(MCB_ROW_CD_IO)
         GPIO.remove_event_detect(MCB_ROW_EF_IO)
         GPIO.remove_event_detect(MCB_ROW_GH_IO)
 
-    def startup_leds(self):
-
-        delay = 0.07
+    def startup_leds(self, delay):
 
         def dance_out():
-            self.set_leds("a1")
+            self.set_leds("45")
             time.sleep(delay)
-            self.set_leds("a1b2")
+            self.set_leds("3456")
             time.sleep(delay)
-            self.set_leds("a1b2c3")
+            self.set_leds("234567")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4")
+            self.set_leds("12345678")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4e5")
+            self.set_leds("12345678a")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4e5f6")
+            self.set_leds("12345678ab")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4e5f6g7")
+            self.set_leds("12345678abc")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4e5f6g7h8")
+            self.set_leds("12345678abcd")
+            time.sleep(delay)
+            self.set_leds("12345678abcde")
+            time.sleep(delay)
+            self.set_leds("12345678abcdef")
+            time.sleep(delay)
+            self.set_leds("12345678abcdefg")
+            time.sleep(delay)
+            self.set_leds("12345678abcdefgh")
             time.sleep(delay)
             time.sleep(delay)
 
         def dance_in():
-            self.set_leds("a1b2c3d4e5f6g7")
+            self.set_leds("12345678abcdefg")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4e5f6")
+            self.set_leds("12345678abcdef")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4e5f6")
+            self.set_leds("12345678abcde")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4e5")
+            self.set_leds("12345678abcd")
             time.sleep(delay)
-            self.set_leds("a1b2c3d4")
+            self.set_leds("12345678abc")
             time.sleep(delay)
-            self.set_leds("a1b2c3")
+            self.set_leds("12345678ab")
             time.sleep(delay)
-            self.set_leds("a1b2")
+            self.set_leds("12345678a")
             time.sleep(delay)
-            self.set_leds("a1")
+            self.set_leds("12345678")
+            time.sleep(delay)
+            self.set_leds("234567")
+            time.sleep(delay)
+            self.set_leds("3456")
+            time.sleep(delay)
+            self.set_leds("45")
             time.sleep(delay)
             self.set_leds("")
             time.sleep(delay)
@@ -188,6 +213,8 @@ class ChessBoard(StateMachine):
 
     def read_fields(self):
 
+        """! Read all the chess fields """
+
         # Read the PCF8575 boards (this is done with the assumption that a1 = p00 etc. reason for reversion)
         self.a = [i for i in pcf_row_ab.port][8:][::-1]
         self.b = [i for i in pcf_row_ab.port][:8][::-1]
@@ -198,6 +225,7 @@ class ChessBoard(StateMachine):
         self.g = [i for i in pcf_row_gh.port][8:][::-1]
         self.h = [i for i in pcf_row_gh.port][:8][::-1]
 
+        # Update current board
         self.board_current = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
 
     def get_field_event(self):
@@ -210,58 +238,63 @@ class ChessBoard(StateMachine):
         # Read the fields
         self.read_fields()
 
+        # Init return value
         field_value = ""
 
         # Determine what field changed based on board vs prev board
         for letter in range(8):
             for digit in range(8):
                 if self.board_current[letter][digit] != self.board_prev[letter][digit]:
-
                     # Safe the last analysed changed field
-                    field_value = chr(letter+97)+chr(digit+49)
-        
+                    field_value = chr(letter + 97) + chr(digit + 49)
+                    if DEBUG: print(f"DEBUG: {field_value} [{self.board_current[letter][digit]}]")
+
         if field_value != "":
             board.board_prev = board.board_current
 
         return field_value
 
-    def set_move_led(self, toggle:bool, move:str):
+    def set_move_led(self, toggle: bool, move: str):
 
-        """! Indicate what the AI wants """
+        """! Indicate the given move with leds """
 
         if toggle:
             self.set_leds(move[0] + move[1])
         else:
             self.set_leds(move[0] + move[1] + move[2] + move[3])
-    
-    def set_move_done_leds(self, move:str):
+
+    def set_move_done_leds(self, move: str):
 
         """! Set leds when move is done """
 
         if len(move) == 4:
             self.set_leds(move[2] + move[3])
 
-    def is_castling(self, move:str, moves:list):
-        
+    def is_castling(self, move: str, moves: list):
+
         """! @brief     Check move for castling 
         
         @param move     The current move to check
+        @param moves    List of moves done so far to determine if a King has been moved
         """
 
         black = True
         white = True
 
-        # If any king has moved, they cannot castle
+        # If any king has moved, they cannot castle # TODO I guess stockfish knows this? Follow up
         for m in moves:
-            if (m[0] + m[1]) == "e1": white = False
-            if (m[0] + m[1]) == "e8": black = False
+            if (m[0] + m[1]) == "e1":
+                white = False
+            if (m[0] + m[1]) == "e8":
+                black = False
 
+        # Determine a castle move and return
         if (move == "e1g1" or move == "e1c1" and white) or (move == "e8g8" or move == "e8c8" and black):
             return True
-        else: 
+        else:
             return False
 
-    def is_move_done(self, move:str, moves:list):
+    def is_move_done(self, move: str, moves: list):
 
         if len(move) == 4:
 
@@ -269,40 +302,46 @@ class ChessBoard(StateMachine):
 
                 # Check all 4 castling combinations and confirm the move by returning True
                 if (move[2] + move[3]) == "g1":
-                    if self.board_current[ord("e")-97][ord("1")-49] == True and \
-                        self.board_current[ord("f")-97][ord("1")-49] == False and \
-                        self.board_current[ord("g")-97][ord("1")-49] == False and \
-                        self.board_current[ord("h")-97][ord("1")-49] == True:
+                    if self.board_current[ord("e") - 97][ord("1") - 49] and \
+                       not self.board_current[ord("f") - 97][ord("1") - 49] and \
+                       not self.board_current[ord("g") - 97][ord("1") - 49] and \
+                       self.board_current[ord("h") - 97][ord("1") - 49]:
                         return True
                 elif (move[2] + move[3]) == "c1":
-                    if self.board_current[ord("e")-97][ord("1")-49] == True and \
-                        self.board_current[ord("d")-97][ord("1")-49] == False and \
-                        self.board_current[ord("c")-97][ord("1")-49] == False and \
-                        self.board_current[ord("a")-97][ord("1")-49] == True:
+                    if self.board_current[ord("e") - 97][ord("1") - 49] and \
+                       not self.board_current[ord("d") - 97][ord("1") - 49] and \
+                       not self.board_current[ord("c") - 97][ord("1") - 49] and \
+                       self.board_current[ord("a") - 97][ord("1") - 49]:
                         return True
                 elif (move[2] + move[3]) == "g8":
-                    if self.board_current[ord("e")-97][ord("8")-49] == True and \
-                        self.board_current[ord("f")-97][ord("8")-49] == False and \
-                        self.board_current[ord("g")-97][ord("8")-49] == False and \
-                        self.board_current[ord("h")-97][ord("8")-49] == True:
+                    if self.board_current[ord("e") - 97][ord("8") - 49] and \
+                       not self.board_current[ord("f") - 97][ord("8") - 49] and \
+                       not self.board_current[ord("g") - 97][ord("8") - 49] and \
+                       self.board_current[ord("h") - 97][ord("8") - 49]:
                         return True
                 elif (move[2] + move[3]) == "c8":
-                    if self.board_current[ord("e")-97][ord("8")-49] == True and \
-                        self.board_current[ord("d")-97][ord("8")-49] == False and \
-                        self.board_current[ord("c")-97][ord("8")-49] == False and \
-                        self.board_current[ord("a")-97][ord("8")-49] == True:
+                    if self.board_current[ord("e") - 97][ord("8") - 49] and \
+                       not self.board_current[ord("d") - 97][ord("8") - 49] and \
+                       not self.board_current[ord("c") - 97][ord("8") - 49] and \
+                       self.board_current[ord("a") - 97][ord("8") - 49]:
                         return True
             else:
-                if self.board_current[ord(move[0]) - 97][ord(move[1]) - 49] == True and self.board_current[ord(move[2]) - 97][ord(move[3]) - 49] == False:
+                if self.board_current[ord(move[0]) - 97][ord(move[1]) - 49] == True and \
+                   self.board_current[ord(move[2]) - 97][ord(move[3]) - 49] == False:
                     return True
 
         return False
 
     def set_setup_leds(self):
 
+        """! Setup led indicators """
+
+        # Read all fields
         self.read_fields()
-        if DEBUG: self.display()
+
+        # Declare a string for holding the chars to indicate
         setup_leds = ""
+
         setup_leds = setup_leds + "a" if board.a == board.setup else setup_leds.replace("a", "")
         setup_leds = setup_leds + "b" if board.b == board.setup else setup_leds.replace("b", "")
         setup_leds = setup_leds + "c" if board.c == board.setup else setup_leds.replace("c", "")
@@ -313,14 +352,21 @@ class ChessBoard(StateMachine):
         setup_leds = setup_leds + "h" if board.h == board.setup else setup_leds.replace("h", "")
         board.set_leds(setup_leds)
 
-    def set_leds(self, led:str):
+    def set_leds(self, led: str):
 
-        # Turn off all leds
+        """! Led indicators 
+        
+        @param led The chars to light up
+        """
+
+        # Set all leds to off
         port = [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
 
+        # If char(s) are given, setup the port
         if len(led) > 0:
             for char in led:
 
+                # ASCII to decimal-index convertion
                 if ord('a') <= ord(char) <= ord('h'):
                     pin = abs(ord(char) - 97 - 15)
                     port[pin] = False
@@ -331,18 +377,26 @@ class ChessBoard(StateMachine):
                     pin = abs(ord(char) - 49 - 7)
                     port[pin] = False
 
+        # Finally set the leds
         pcf_leds.port = port
 
-    def set_difficulty_leds(self, difficulty):
+    def set_difficulty_leds(self, difficulty: int):
+
+        """! Difficulty led indicator 
+        
+        @param difficulty   Difficulty number
+        """
 
         led_string = ""
 
         for i in range(difficulty):
-            led_string = led_string + str(i+1)
-        
+            led_string = led_string + str(i + 1)
+
         self.set_leds(led_string)
 
     def display(self):
+
+        """! Debug function to display the state of the fields in terminal """
 
         # Read all fields
         self.read_fields()
@@ -350,25 +404,56 @@ class ChessBoard(StateMachine):
         # Display status of all fields.
         print(f"  a   b   c   d   e   f   g   h    ")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[7] else 'p'} | {' ' if self.b[7] else 'p'} | {' ' if self.c[7] else 'p'} | {' ' if self.d[7] else 'p'} | {' ' if self.e[7] else 'p'} | {' ' if self.f[7] else 'p'} | {' ' if self.g[7] else 'p'} | {' ' if self.h[7] else 'p'} | 8")
+        print(f"| {' ' if self.a[7] else 'x'} | {' ' if self.b[7] else 'x'} | {' ' if self.c[7] else 'x'} | {' ' if self.d[7] else 'x'} | {' ' if self.e[7] else 'x'} | {' ' if self.f[7] else 'x'} | {' ' if self.g[7] else 'x'} | {' ' if self.h[7] else 'x'} | 8")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[6] else 'p'} | {' ' if self.b[6] else 'p'} | {' ' if self.c[6] else 'p'} | {' ' if self.d[6] else 'p'} | {' ' if self.e[6] else 'p'} | {' ' if self.f[6] else 'p'} | {' ' if self.g[6] else 'p'} | {' ' if self.h[6] else 'p'} | 7")
+        print(f"| {' ' if self.a[6] else 'x'} | {' ' if self.b[6] else 'x'} | {' ' if self.c[6] else 'x'} | {' ' if self.d[6] else 'x'} | {' ' if self.e[6] else 'x'} | {' ' if self.f[6] else 'x'} | {' ' if self.g[6] else 'x'} | {' ' if self.h[6] else 'x'} | 7")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[5] else 'p'} | {' ' if self.b[5] else 'p'} | {' ' if self.c[5] else 'p'} | {' ' if self.d[5] else 'p'} | {' ' if self.e[5] else 'p'} | {' ' if self.f[5] else 'p'} | {' ' if self.g[5] else 'p'} | {' ' if self.h[5] else 'p'} | 6")
+        print(f"| {' ' if self.a[5] else 'x'} | {' ' if self.b[5] else 'x'} | {' ' if self.c[5] else 'x'} | {' ' if self.d[5] else 'x'} | {' ' if self.e[5] else 'x'} | {' ' if self.f[5] else 'x'} | {' ' if self.g[5] else 'x'} | {' ' if self.h[5] else 'x'} | 6")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[4] else 'p'} | {' ' if self.b[4] else 'p'} | {' ' if self.c[4] else 'p'} | {' ' if self.d[4] else 'p'} | {' ' if self.e[4] else 'p'} | {' ' if self.f[4] else 'p'} | {' ' if self.g[4] else 'p'} | {' ' if self.h[4] else 'p'} | 5")
+        print(f"| {' ' if self.a[4] else 'x'} | {' ' if self.b[4] else 'x'} | {' ' if self.c[4] else 'x'} | {' ' if self.d[4] else 'x'} | {' ' if self.e[4] else 'x'} | {' ' if self.f[4] else 'x'} | {' ' if self.g[4] else 'x'} | {' ' if self.h[4] else 'x'} | 5")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[3] else 'p'} | {' ' if self.b[3] else 'p'} | {' ' if self.c[3] else 'p'} | {' ' if self.d[3] else 'p'} | {' ' if self.e[3] else 'p'} | {' ' if self.f[3] else 'p'} | {' ' if self.g[3] else 'p'} | {' ' if self.h[3] else 'p'} | 4")
+        print(f"| {' ' if self.a[3] else 'x'} | {' ' if self.b[3] else 'x'} | {' ' if self.c[3] else 'x'} | {' ' if self.d[3] else 'x'} | {' ' if self.e[3] else 'x'} | {' ' if self.f[3] else 'x'} | {' ' if self.g[3] else 'x'} | {' ' if self.h[3] else 'x'} | 4")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[2] else 'p'} | {' ' if self.b[2] else 'p'} | {' ' if self.c[2] else 'p'} | {' ' if self.d[2] else 'p'} | {' ' if self.e[2] else 'p'} | {' ' if self.f[2] else 'p'} | {' ' if self.g[2] else 'p'} | {' ' if self.h[2] else 'p'} | 3")
+        print(f"| {' ' if self.a[2] else 'x'} | {' ' if self.b[2] else 'x'} | {' ' if self.c[2] else 'x'} | {' ' if self.d[2] else 'x'} | {' ' if self.e[2] else 'x'} | {' ' if self.f[2] else 'x'} | {' ' if self.g[2] else 'x'} | {' ' if self.h[2] else 'x'} | 3")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[1] else 'p'} | {' ' if self.b[1] else 'p'} | {' ' if self.c[1] else 'p'} | {' ' if self.d[1] else 'p'} | {' ' if self.e[1] else 'p'} | {' ' if self.f[1] else 'p'} | {' ' if self.g[1] else 'p'} | {' ' if self.h[1] else 'p'} | 2")
+        print(f"| {' ' if self.a[1] else 'x'} | {' ' if self.b[1] else 'x'} | {' ' if self.c[1] else 'x'} | {' ' if self.d[1] else 'x'} | {' ' if self.e[1] else 'x'} | {' ' if self.f[1] else 'x'} | {' ' if self.g[1] else 'x'} | {' ' if self.h[1] else 'x'} | 2")
         print(f"+---+---+---+---+---+---+---+---+  ")
-        print(f"| {' ' if self.a[0] else 'p'} | {' ' if self.b[0] else 'p'} | {' ' if self.c[0] else 'p'} | {' ' if self.d[0] else 'p'} | {' ' if self.e[0] else 'p'} | {' ' if self.f[0] else 'p'} | {' ' if self.g[0] else 'p'} | {' ' if self.h[0] else 'p'} | 1")
+        print(f"| {' ' if self.a[0] else 'x'} | {' ' if self.b[0] else 'x'} | {' ' if self.c[0] else 'x'} | {' ' if self.d[0] else 'x'} | {' ' if self.e[0] else 'x'} | {' ' if self.f[0] else 'x'} | {' ' if self.g[0] else 'x'} | {' ' if self.h[0] else 'x'} | 1")
         print(f"+---+---+---+---+---+---+---+---+  ")
+
+    def full_display(self, sf):
+
+        """! Debug function to display the state of the fields in terminal """
+
+        # Read all fields
+        self.read_fields()
+
+        sf = sf.replace('\r', "").replace("\n", "")
+
+        # Display status of all fields.
+        #print(f"  a   b   c   d   e   f   g   h    ")
+        print(f"          SENSOR BOARD                         STOCKFISH BOARD")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[0:33]}")
+        print(f"| {' ' if self.a[7] else 'x'} | {' ' if self.b[7] else 'x'} | {' ' if self.c[7] else 'x'} | {' ' if self.d[7] else 'x'} | {' ' if self.e[7] else 'x'} | {' ' if self.f[7] else 'x'} | {' ' if self.g[7] else 'x'} | {' ' if self.h[7] else 'x'} | 8   {sf[33:68]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[68:101]}")
+        print(f"| {' ' if self.a[6] else 'x'} | {' ' if self.b[6] else 'x'} | {' ' if self.c[6] else 'x'} | {' ' if self.d[6] else 'x'} | {' ' if self.e[6] else 'x'} | {' ' if self.f[6] else 'x'} | {' ' if self.g[6] else 'x'} | {' ' if self.h[6] else 'x'} | 7   {sf[101:136]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[136:169]}")
+        print(f"| {' ' if self.a[5] else 'x'} | {' ' if self.b[5] else 'x'} | {' ' if self.c[5] else 'x'} | {' ' if self.d[5] else 'x'} | {' ' if self.e[5] else 'x'} | {' ' if self.f[5] else 'x'} | {' ' if self.g[5] else 'x'} | {' ' if self.h[5] else 'x'} | 6   {sf[169:204]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[204:237]}")
+        print(f"| {' ' if self.a[4] else 'x'} | {' ' if self.b[4] else 'x'} | {' ' if self.c[4] else 'x'} | {' ' if self.d[4] else 'x'} | {' ' if self.e[4] else 'x'} | {' ' if self.f[4] else 'x'} | {' ' if self.g[4] else 'x'} | {' ' if self.h[4] else 'x'} | 5   {sf[237:272]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[272:305]}")
+        print(f"| {' ' if self.a[3] else 'x'} | {' ' if self.b[3] else 'x'} | {' ' if self.c[3] else 'x'} | {' ' if self.d[3] else 'x'} | {' ' if self.e[3] else 'x'} | {' ' if self.f[3] else 'x'} | {' ' if self.g[3] else 'x'} | {' ' if self.h[3] else 'x'} | 4   {sf[305:340]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[340:373]}")
+        print(f"| {' ' if self.a[2] else 'x'} | {' ' if self.b[2] else 'x'} | {' ' if self.c[2] else 'x'} | {' ' if self.d[2] else 'x'} | {' ' if self.e[2] else 'x'} | {' ' if self.f[2] else 'x'} | {' ' if self.g[2] else 'x'} | {' ' if self.h[2] else 'x'} | 3   {sf[373:408]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[408:441]}")
+        print(f"| {' ' if self.a[1] else 'x'} | {' ' if self.b[1] else 'x'} | {' ' if self.c[1] else 'x'} | {' ' if self.d[1] else 'x'} | {' ' if self.e[1] else 'x'} | {' ' if self.f[1] else 'x'} | {' ' if self.g[1] else 'x'} | {' ' if self.h[1] else 'x'} | 2   {sf[441:476]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[476:509]}")
+        print(f"| {' ' if self.a[0] else 'x'} | {' ' if self.b[0] else 'x'} | {' ' if self.c[0] else 'x'} | {' ' if self.d[0] else 'x'} | {' ' if self.e[0] else 'x'} | {' ' if self.f[0] else 'x'} | {' ' if self.g[0] else 'x'} | {' ' if self.h[0] else 'x'} | 1   {sf[509:544]}")
+        print(f"+---+---+---+---+---+---+---+---+     {sf[544:577]}")
 
 class ChessBoardFsm(StateMachine):
 
+    # Initialize the states
     init = State('Init', initial=True)
     difficulty = State('Difficulty')
     setup = State('Setup')
@@ -377,6 +462,7 @@ class ChessBoardFsm(StateMachine):
     checkmate = State("Checkmate")
     undo_move = State('Undo')
 
+    # Initialize all transitions allowed
     go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init)
     go_to_difficulty = init.to(difficulty) | setup.to(difficulty)
     go_to_setup = difficulty.to(setup)
@@ -384,6 +470,7 @@ class ChessBoardFsm(StateMachine):
     go_to_human_move = setup.to(human_move) | ai_move.to(human_move)
     go_to_undo_move = human_move.to(undo_move) | ai_move.to(undo_move)
     go_to_checkmate = human_move.to(checkmate) | ai_move.to(checkmate)
+
 
 def signal_handler(sig, frame):
 
@@ -394,7 +481,10 @@ def signal_handler(sig, frame):
     board.set_leds("")
     sys.exit(0)
 
+
 if __name__ == "__main__":
+
+    """! @brief    Main function """
 
     # CTRL+C handler
     signal(SIGINT, signal_handler)
@@ -410,7 +500,7 @@ if __name__ == "__main__":
     first_entry = True
     current_state = None
 
-    # Movement global varialbes and flags
+    # Movement global variables and flags
     human_move_field = ""
     human_move_done = False
     move_stockfish = ""
@@ -420,6 +510,11 @@ if __name__ == "__main__":
 
     # Global stockfish object
     stockfish = None
+
+    print(APP_TITLE)
+    print(AUTHOR)
+    print(VERSION)
+    print(DATE)
 
     while True:
 
@@ -433,32 +528,33 @@ if __name__ == "__main__":
         if fsm.is_init:
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
-                board.startup_leds()
-                board.add_button_events()
                 human_move_field = ""
                 human_move_done = False
                 move_stockfish = ""
                 move_human = ""
                 moves = []
+                stockfish = Stockfish("/home/pi/mChessBoard/src/stockfish-rpiz", parameters={"Threads": 1, "Minimum Thinking Time": 30})
+                board.startup_leds(0.05)
 
             # Set next state
             fsm.go_to_difficulty()
 
-        # STATE: Difficulty of the AI
+        # STATE: Difficulty of AI
         elif fsm.is_difficulty:
 
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
+                board.add_button_events()
                 board.set_difficulty_leds(play_difficulty)
 
             if GPIO.event_detected(MCB_BUT_BLACK):
-                
+
                 # Increment difficulty
                 if play_difficulty < MCB_PLAY_DIFF_MAX:
                     play_difficulty = play_difficulty + 1
                 if DEBUG: print(f"Difficulty Up: {play_difficulty}")
                 board.set_difficulty_leds(play_difficulty)
-            
+
             if GPIO.event_detected(MCB_BUT_WHITE):
 
                 # Decrement difficulty
@@ -469,51 +565,34 @@ if __name__ == "__main__":
 
             if GPIO.event_detected(MCB_BUT_CONFIRM):
                 print(f"Confirm {play_difficulty}")
+                stockfish.set_skill_level(play_difficulty)
                 board.set_leds("")
                 fsm.go_to_setup()
-            
-            if GPIO.event_detected(MCB_BUT_BACK):
-                print("Back")
-                fsm.go_to_versus()
 
         # STATE: Setup
         elif fsm.is_setup:
-            
+
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
                 board.set_setup_leds()
+                board.add_button_events()
                 board.add_field_events()
 
-            if GPIO.event_detected(MCB_ROW_AB_IO) or GPIO.event_detected(MCB_ROW_CD_IO) or GPIO.event_detected(MCB_ROW_EF_IO) or GPIO.event_detected(MCB_ROW_GH_IO):
+            elif GPIO.event_detected(MCB_ROW_AB_IO) or GPIO.event_detected(MCB_ROW_CD_IO) or GPIO.event_detected(
+                    MCB_ROW_EF_IO) or GPIO.event_detected(MCB_ROW_GH_IO):
                 board.set_setup_leds()
 
-            if board.board_current == board.board_setup:
-
+            elif board.board_current == board.board_setup:
                 print("Board is set up")
                 # Setup board
                 board.set_leds("abcdefgh12345678")
                 board.board_prev = board.board_current
-                stockfish = Stockfish("/home/pi/mChessBoard/src/stockfish-rpiz",
-                        parameters={
-                        "Write Debug Log": "true",
-                        "Contempt": 0,
-                        "Min Split Depth": 0,
-                        "Threads": 2,
-                        "Ponder": "false",
-                        "Hash": 16,
-                        "MultiPV": 1,
-                        "Skill Level": play_difficulty,
-                        "Move Overhead": 30,
-                        "Minimum Thinking Time": 20,
-                        "Slow Mover": 80,
-                        "UCI_Chess960": "false",
-                        }
-                        )
+                time.sleep(1)
                 board.set_leds("")
                 board.remove_field_events()
                 fsm.go_to_human_move()
-            
-            if GPIO.event_detected(MCB_BUT_BACK):
+
+            elif GPIO.event_detected(MCB_BUT_BACK):
                 print("Back")
                 fsm.go_to_difficulty()
 
@@ -523,12 +602,11 @@ if __name__ == "__main__":
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
                 board.add_field_events()
-                print(stockfish.get_board_visual())
                 human_move_field = ""
+                toggle = False
                 timer = time.time()
-                toggle = True
-                #print(board.board_current)
-            
+                # print(board.board_current)
+
             if len(move_human) == 4:
                 board.set_move_led(toggle, move_human)
                 # Handle the led flash indicator timing
@@ -536,20 +614,24 @@ if __name__ == "__main__":
                     toggle = not toggle
                     timer = time.time()
 
-
             # Handle move on board
-            if GPIO.event_detected(MCB_ROW_AB_IO) or GPIO.event_detected(MCB_ROW_CD_IO) or GPIO.event_detected(MCB_ROW_EF_IO) or GPIO.event_detected(MCB_ROW_GH_IO):
+            if GPIO.event_detected(MCB_ROW_AB_IO) or \
+               GPIO.event_detected(MCB_ROW_CD_IO) or \
+               GPIO.event_detected(MCB_ROW_EF_IO) or \
+               GPIO.event_detected(MCB_ROW_GH_IO):
                 print("Event: Field changed")
+                # Get the field with event
                 human_move_field = board.get_field_event()
-                print(human_move_field)
-                board.set_leds(human_move_field)
+                
+                # If first event and not an empty event
                 if len(move_human) == 0 and human_move_field != "":
+                    # Set the single field led
+                    board.set_leds(human_move_field)
                     move_human = human_move_field
-                    print(move_human)
+                # Else if second event and not the same field
                 elif len(move_human) == 2 and human_move_field != "" and human_move_field != move_human:
                     move_human = move_human + human_move_field
                     move_human_opposite = human_move_field + move_human
-                    print(move_human)
                     timer = time.time()
                     if stockfish.is_move_correct(move_human):
                         move_human = move_human
@@ -557,41 +639,43 @@ if __name__ == "__main__":
                         move_human = move_human_opposite
                     else:
                         move_human = ""
+                        board.set_leds("")
 
             # If black or white is pressed
-            if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) and len(move_human) == 4:
-                print("Event: Confirm human move (not implemented)")
-                if DEBUG: print(f"Human move: {move_human}")
-                board.set_move_done_leds(move_human)
-                if DEBUG: board.display()
+            elif GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) and len(move_human) == 4:
+                print(f"Event: Confirm human move: {move_human}")
+                board.read_fields()
                 if board.is_move_done(move_human, moves):
                     if stockfish.is_move_correct(move_human):
                         moves.append(move_human)
                         stockfish.set_position(moves)
+                        board.set_move_done_leds(move_human)
                         move_human = ""
-                        if stockfish.get_evaluation().get("value") == 0:
+                        if DEBUG: board.full_display(stockfish.get_board_visual())
+                        eval = stockfish.get_evaluation()
+                        if eval.get('type') == 'mate' and eval.get("value") == 0:
                             fsm.go_to_checkmate()
+                else:
+                    if DEBUG: board.display()
 
             # Is confirm pressed?
-            if GPIO.event_detected(MCB_BUT_CONFIRM):
+            elif GPIO.event_detected(MCB_BUT_CONFIRM):
                 print("Event: Hint or AI move")
                 board.remove_field_events()
                 move_stockfish = stockfish.get_best_move()
-                if DEBUG: print(move_stockfish[-1])
-                if DEBUG: print(moves)
                 fsm.go_to_ai_move()
 
-            if GPIO.event_detected(MCB_BUT_BACK):
+            elif GPIO.event_detected(MCB_BUT_BACK):
                 print("Back")
                 if len(move_human) > 0:
                     print("Reset human move")
                     move_human = ""
-                    if len(moves) > 0:
-                        print(moves[-1])
-                        board.set_leds(moves[-1][2] + moves[-1][3])
-                    else: 
-                        board.set_leds("")
-                
+                if len(moves) > 0:
+                    print(moves[-1])
+                    board.set_leds(moves[-1][2] + moves[-1][3])
+                else:
+                    board.set_leds("")
+
         # STATE: AI Move
         elif fsm.is_ai_move:
 
@@ -600,40 +684,49 @@ if __name__ == "__main__":
                 timer = time.time()
                 toggle = True
 
-            # Show AI move
-            board.set_move_led(toggle, move_stockfish)
-
             # Handle the led flash indicator timing
             if time.time() > timer + MCB_PLAY_AI_LED_TOGGLE_TIME:
                 toggle = not toggle
+                board.set_move_led(toggle, move_stockfish)
                 timer = time.time()
 
             # Confirm AI/hint move
             if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
-                print("Confirm AI move")
-                board.set_move_done_leds(move_stockfish)
-                if DEBUG: board.display()
+                print(f"Confirm AI move: {move_stockfish}")
+                board.read_fields()
                 if board.is_move_done(move_stockfish, moves):
+                    board.board_prev = board.board_current
                     if stockfish.is_move_correct(move_stockfish):
                         moves.append(move_stockfish)
                         stockfish.set_position(moves)
+                        board.set_move_done_leds(move_stockfish)
                         move_stockfish = ""
-                        if stockfish.get_evaluation().get("value") == 0:
+                        if DEBUG: board.full_display(stockfish.get_board_visual())
+                        eval = stockfish.get_evaluation()
+                        if eval.get('type') == 'mate' and eval.get("value") == 0:
                             fsm.go_to_checkmate()
                         else:
                             fsm.go_to_human_move()
+                else:
+                    if DEBUG: board.display()
 
-            if GPIO.event_detected(MCB_BUT_BACK):
+            elif GPIO.event_detected(MCB_BUT_BACK):
                 print("Event: Back to Human move")
+                if len(moves) > 0:
+                    print(moves[-1])
+                    board.set_leds(moves[-1][2] + moves[-1][3])
+                else:
+                    board.set_leds("")
                 fsm.go_to_human_move()
 
+        # STATE: Checkmate
         elif fsm.is_checkmate:
-            
+
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
                 timer = time.time()
                 toggle = True
-            
+
             if time.time() > timer + MCB_PLAY_CHECKMATE_LED_TOGGLE_TIME:
                 if toggle:
                     board.set_leds("12345678abcdefgh")
@@ -643,14 +736,22 @@ if __name__ == "__main__":
                     toggle = True
                 timer = time.time()
 
-            if GPIO.event_detected(MCB_BUT_WHITE) or GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_CONFIRM) or GPIO.event_detected(MCB_BUT_BACK):
-                print("Resetting")
+            if GPIO.event_detected(MCB_BUT_WHITE) or \
+                 GPIO.event_detected(MCB_BUT_BLACK) or \
+                 GPIO.event_detected(MCB_BUT_CONFIRM) or \
+                 GPIO.event_detected(MCB_BUT_BACK):
+
+                print("Go to init")
                 board.remove_button_events()
                 board.remove_field_events()
                 fsm.go_to_init()
 
-        # Reset
-        if not GPIO.input(MCB_BUT_WHITE) and not GPIO.input(MCB_BUT_BLACK) and not GPIO.input(MCB_BUT_CONFIRM) and not GPIO.input(MCB_BUT_BACK):
+        # Reset (all buttons pressed)
+        if not GPIO.input(MCB_BUT_WHITE) and \
+           not GPIO.input(MCB_BUT_BLACK) and \
+           not GPIO.input(MCB_BUT_CONFIRM) and \
+           not GPIO.input(MCB_BUT_BACK):
+
             print("Resetting")
             board.remove_button_events()
             board.remove_field_events()
