@@ -31,8 +31,8 @@ MCB_BUT_WHITE = 17  # Closest to WHITE side
 MCB_BUT_CONFIRM = 27  # Middle close to WHITE side
 MCB_BUT_BACK = 23  # Middle close to BLACK side
 MCB_BUT_BLACK = 22  # Closest to BLACK side
-MCB_BUT_DEBOUNCE = 250  # Button debounce
-MCB_FIELD_DEBOUNCE = 100  # Field debounce
+MCB_BUT_DEBOUNCE = 200  # Button debounce
+MCB_FIELD_DEBOUNCE = 50  # Field debounce
 
 """! @brief     Board fields and leds"""
 pcf_row_ab = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_AB_ADDRESS)
@@ -276,12 +276,15 @@ class ChessBoard(StateMachine):
         
         @param move     The current move to check
         @param moves    List of moves done so far to determine if a King has been moved
+        @return         True if castling
         """
 
         black = True
         white = True
 
-        # If any king has moved, they cannot castle # TODO I guess stockfish knows this? Follow up
+        # If any king has moved in the past, it is not a castle, this is in a 
+        # scenario where a piece moves e.g. e1g1 and is not the king, 
+        # then it is not a castle
         for m in moves:
             if (m[0] + m[1]) == "e1":
                 white = False
@@ -291,16 +294,25 @@ class ChessBoard(StateMachine):
         # Determine a castle move and return
         if (move == "e1g1" or move == "e1c1" and white) or (move == "e8g8" or move == "e8c8" and black):
             return True
-        else:
-            return False
+        
+        # Else just return False
+        return False
 
     def is_move_done(self, move: str, moves: list):
 
+        """! Function to determ if a move is done
+        
+        @param move     The current move to check
+        @param moves    List of moves done so far to for castling check
+        """
+
+        # A move can only be "done" if the there is 4 chars
         if len(move) == 4:
 
+            # Check if the move is a castling
             if self.is_castling(move, moves):
 
-                # Check all 4 castling combinations and confirm the move by returning True
+                # Check for all 4 castling combinations and confirm the move by returning True
                 if (move[2] + move[3]) == "g1":
                     if self.board_current[ord("e") - 97][ord("1") - 49] and \
                        not self.board_current[ord("f") - 97][ord("1") - 49] and \
@@ -334,14 +346,13 @@ class ChessBoard(StateMachine):
 
     def set_setup_leds(self):
 
-        """! Setup led indicators """
+        """! Setup/missing piece led indicators """
 
         # Read all fields
         self.read_fields()
 
-        # Declare a string for holding the chars to indicate
+        # Declare a string for holding the chars to indicate which a-h rows are missing a piece
         setup_leds = ""
-
         setup_leds = setup_leds + "a" if board.a == board.setup else setup_leds.replace("a", "")
         setup_leds = setup_leds + "b" if board.b == board.setup else setup_leds.replace("b", "")
         setup_leds = setup_leds + "c" if board.c == board.setup else setup_leds.replace("c", "")
@@ -356,7 +367,7 @@ class ChessBoard(StateMachine):
 
         """! Led indicators 
         
-        @param led The chars to light up
+        @param led      The chars to light up
         """
 
         # Set all leds to off
@@ -463,13 +474,13 @@ class ChessBoardFsm(StateMachine):
     undo_move = State('Undo')
 
     # Initialize all transitions allowed
-    go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init)
+    go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init) | undo_move.to(init)
     go_to_difficulty = init.to(difficulty) | setup.to(difficulty)
     go_to_setup = difficulty.to(setup)
     go_to_ai_move = setup.to(ai_move) | human_move.to(ai_move)
     go_to_human_move = setup.to(human_move) | ai_move.to(human_move)
-    go_to_undo_move = human_move.to(undo_move) | ai_move.to(undo_move)
     go_to_checkmate = human_move.to(checkmate) | ai_move.to(checkmate)
+    go_to_undo_move = human_move.to(undo_move) | ai_move.to(undo_move)
 
 
 def signal_handler(sig, frame):
@@ -501,21 +512,21 @@ if __name__ == "__main__":
     current_state = None
 
     # Movement global variables and flags
-    human_move_field = ""
-    human_move_done = False
-    move_stockfish = ""
-    move_human = ""
-    moves = []
-    play_difficulty = 1
+    move_stockfish = ""     ### Move made by Stockfish AI
+    move_human = ""         ### Move made by Human
+    moves = []              ### List of moves for stockfish
+    play_difficulty = 1     ### Default difficulty
 
     # Global stockfish object
     stockfish = None
 
+    # Print out some version data
     print(APP_TITLE)
     print(AUTHOR)
     print(VERSION)
     print(DATE)
 
+    # Main loop
     while True:
 
         # Set flag if the state has changed
@@ -528,12 +539,15 @@ if __name__ == "__main__":
         if fsm.is_init:
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
-                human_move_field = ""
-                human_move_done = False
+                # Reset AI move instance
                 move_stockfish = ""
+                # Reset Human move instance
                 move_human = ""
+                # Reset moves list
                 moves = []
+                # Initiate stockfish engine
                 stockfish = Stockfish("/home/pi/mChessBoard/src/stockfish-rpiz", parameters={"Threads": 1, "Minimum Thinking Time": 30})
+                # Let the LED's dance
                 board.startup_leds(0.05)
 
             # Set next state
@@ -544,10 +558,18 @@ if __name__ == "__main__":
 
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
+                # Add button events
                 board.add_button_events()
+                # Set LED's to default difficulty
                 board.set_difficulty_leds(play_difficulty)
 
-            if GPIO.event_detected(MCB_BUT_BLACK):
+            elif GPIO.event_detected(MCB_BUT_CONFIRM):
+                print(f"Confirm {play_difficulty}")
+                stockfish.set_skill_level(play_difficulty)
+                board.set_leds("")
+                fsm.go_to_setup()
+
+            elif GPIO.event_detected(MCB_BUT_BLACK):
 
                 # Increment difficulty
                 if play_difficulty < MCB_PLAY_DIFF_MAX:
@@ -555,7 +577,7 @@ if __name__ == "__main__":
                 if DEBUG: print(f"Difficulty Up: {play_difficulty}")
                 board.set_difficulty_leds(play_difficulty)
 
-            if GPIO.event_detected(MCB_BUT_WHITE):
+            elif GPIO.event_detected(MCB_BUT_WHITE):
 
                 # Decrement difficulty
                 if play_difficulty > MCB_PLAY_DIFF_MIN:
@@ -563,23 +585,19 @@ if __name__ == "__main__":
                 if DEBUG: print(f"Difficulty Down: {play_difficulty}")
                 board.set_difficulty_leds(play_difficulty)
 
-            if GPIO.event_detected(MCB_BUT_CONFIRM):
-                print(f"Confirm {play_difficulty}")
-                stockfish.set_skill_level(play_difficulty)
-                board.set_leds("")
-                fsm.go_to_setup()
-
         # STATE: Setup
         elif fsm.is_setup:
 
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
-                board.set_setup_leds()
                 board.add_button_events()
                 board.add_field_events()
+                board.set_setup_leds()
 
-            elif GPIO.event_detected(MCB_ROW_AB_IO) or GPIO.event_detected(MCB_ROW_CD_IO) or GPIO.event_detected(
-                    MCB_ROW_EF_IO) or GPIO.event_detected(MCB_ROW_GH_IO):
+            elif GPIO.event_detected(MCB_ROW_AB_IO) or \
+                 GPIO.event_detected(MCB_ROW_CD_IO) or \
+                 GPIO.event_detected(MCB_ROW_EF_IO) or \
+                 GPIO.event_detected(MCB_ROW_GH_IO):
                 board.set_setup_leds()
 
             elif board.board_current == board.board_setup:
@@ -753,6 +771,7 @@ if __name__ == "__main__":
            not GPIO.input(MCB_BUT_BACK):
 
             print("Resetting")
+            board.set_leds("abcdefgh12345678")
             board.remove_button_events()
             board.remove_field_events()
             fsm.go_to_init()
