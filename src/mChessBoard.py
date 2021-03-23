@@ -524,9 +524,6 @@ class ChessBoardFsm(StateMachine):
     go_to_pawn_promotion = human_move.to(pawn_promotion) | ai_move.to(pawn_promotion)
     go_to_undo_move = human_move.to(undo_move) | ai_move.to(undo_move)
 
-# Global stockfish object
-stockfish = None
-
 def signal_handler(sig, frame):
 
     """! @brief    Exit function"""
@@ -552,6 +549,8 @@ if __name__ == "__main__":
     # Parse arguments
     args = parser()
 
+    
+
     # Flags & Variables
     initial = True
     first_entry = True
@@ -565,7 +564,14 @@ if __name__ == "__main__":
     moves = []              ### List of moves for stockfish
     play_difficulty = 1     ### Default difficulty
 
-    test_time = 0
+    # Stockfish setup
+    stockfish = None
+    stockfish_exe = args.input
+    stockfish_parameters = {"Threads": 1, 
+                            "Minimum Thinking Time": 30,
+                            "Skill Level": play_difficulty,
+                            "UCI_LimitStrength": "false", 
+                            "UCI_Elo": 1350}
 
     # Main loop
     while True:
@@ -589,8 +595,6 @@ if __name__ == "__main__":
                 moves = []
                 # Add button events (delays the setup init)
                 board.add_button_events()
-                # Initiate stockfish engine
-                stockfish = Stockfish("/home/pi/mChessBoard/src/stockfish-rpiz", parameters={"Threads": 1, "Minimum Thinking Time": 30, "UCI_LimitStrength": "true", "UCI_Elo": 600})
                 # Let the LED's dance
                 board.startup_leds(0.05)
                 # Reset undo history
@@ -611,7 +615,18 @@ if __name__ == "__main__":
 
                 # Confirm and change state
                 print(f"Confirm {play_difficulty}")
-                stockfish.set_skill_level(play_difficulty)
+                if play_difficulty <= 2:
+                    if args.debug: print(f"Using Skill Level: {play_difficulty}")
+                    stockfish_parameters.update({"UCI_LimitStrength": "false"})
+                    stockfish_parameters.update({"Skill Level": play_difficulty})
+                else:
+                    if args.debug: print(f"Using ELO rating: {play_difficulty * 50 + 1250}")
+                    stockfish_parameters.update({"UCI_LimitStrength": "true"})
+                    stockfish_parameters.update({"UCI_Elo": play_difficulty * 50 + 1200})       # 1350 to 2850 (limit here is 1600, enough for me)
+                
+                # Initiate stockfish engine
+                board.set_leds("12345678abcdefgh")
+                stockfish = Stockfish(stockfish_exe, parameters=stockfish_parameters)
                 if args.debug: print(stockfish.get_parameters())
                 board.set_leds("")
                 fsm.go_to_setup()
@@ -885,6 +900,7 @@ if __name__ == "__main__":
             board.set_leds("abcdefgh12345678")
             board.remove_button_events()
             board.remove_field_events()
+            time.sleep(2)
             fsm.go_to_init()
 
         # Not initial anymore
