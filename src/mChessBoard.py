@@ -84,6 +84,7 @@ class ChessBoard(StateMachine):
         # Declare board 2D lists
         self.board_current = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
         self.board_prev = self.board_current
+        self.board_undo = [self.board_current]
 
         # Default board setup (False == Place piece)
         self.setup = [False, False, True, True, True, True, False, False]
@@ -247,6 +248,8 @@ class ChessBoard(StateMachine):
         # Determine what field changed based on board vs prev board
         for letter in range(8):
             for digit in range(8):
+                #if args.debug: print(f"self.board_current[letter][digit]: {self.board_current[letter][digit]}")
+                #if args.debug: print(f"self.board_prev[letter][digit]: {self.board_prev[letter][digit]}")
                 if self.board_current[letter][digit] != self.board_prev[letter][digit]:
                     # Safe the last analysed changed field
                     field_value = chr(letter + 97) + chr(digit + 49)
@@ -301,12 +304,46 @@ class ChessBoard(StateMachine):
         # Else just return False
         return False
 
+    def is_undo_move_done(self):
+
+        """! Function to determ if the undo move is done
+        
+        @param move     The current move to check
+        @param moves    List of moves done so far, for castling check
+        """
+
+        # Read board
+        self.read_fields()
+
+        # Check if it match the last move in history
+        if self.board_prev == self.board_undo[-1]:
+            if args.debug: print("self.board_current == self.board_undo[-1]")
+            
+            # Update undo history
+            del self.board_undo[-1]
+
+            # Update prev status
+            if len(self.board_undo) > 0:
+                self.board_prev = self.board_undo[-1]
+            else:
+                self.board_prev = self.board_current
+            
+            return True
+
+        for i in range(8):
+            if args.debug: print(f"self.board_current : {self.board_current[i]}")
+            if args.debug: print(f"self.board_undo[-1]: {self.board_undo[-1][i]}")
+
+        return False
+                
+
+
     def is_move_done(self, move: str, moves: list):
 
         """! Function to determ if a move is done
         
         @param move     The current move to check
-        @param moves    List of moves done so far to for castling check
+        @param moves    List of moves done so far, for castling check
         """
 
         # A move can only be "done" if the there is 4 chars
@@ -556,6 +593,8 @@ if __name__ == "__main__":
                 stockfish = Stockfish("/home/pi/mChessBoard/src/stockfish-rpiz", parameters={"Threads": 1, "Minimum Thinking Time": 30, "UCI_LimitStrength": "true", "UCI_Elo": 600})
                 # Let the LED's dance
                 board.startup_leds(0.05)
+                # Reset undo history
+                board.board_undo = []
 
             # Set next state
             fsm.go_to_difficulty()
@@ -687,7 +726,8 @@ if __name__ == "__main__":
                         if args.debug: board.full_display(stockfish.get_board_visual())
                         if stockfish.get_evaluation() == {"type": "mate", "value": 0}:
                             fsm.go_to_checkmate()
-                    
+                        board.board_undo.append(board.board_current)
+                        
                     elif stockfish.is_move_correct(move_human+'q'):
                         fsm.go_to_pawn_promotion()
                 else:
@@ -737,6 +777,7 @@ if __name__ == "__main__":
                             fsm.go_to_checkmate()
                         else:
                             fsm.go_to_human_move()
+                        board.board_undo.append(board.board_current)
                 else:
                     if args.debug: board.display()
 
@@ -787,14 +828,13 @@ if __name__ == "__main__":
                 board.set_move_led(toggle, move_undo)
                 timer = time.time()
           
-            # Confirm AI/hint move
+            # Confirm Undo move
             if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
                 print(f"Confirm Undo move: {move_undo}")
-                board.read_fields()
-                if board.is_move_done(move_undo, moves):
-                    board.board_prev = board.board_current
+                if board.is_undo_move_done():
                     move_undo = ""
                     del moves[-1]
+                    stockfish.set_position(moves)
                     if len(moves) > 0: 
                         board.set_move_done_leds(moves[-1])
                     else:
@@ -803,6 +843,10 @@ if __name__ == "__main__":
                     fsm.go_to_human_move()
                 else:
                     if args.debug: board.display()
+
+            elif GPIO.event_detected(MCB_BUT_BACK):
+                print("Event: Cancel Undo")
+                fsm.go_to_human_move()
 
         # STATE: Checkmate
         elif fsm.is_checkmate:
