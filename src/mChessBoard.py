@@ -31,7 +31,7 @@ MCB_BUT_WHITE = 17  # Closest to WHITE side
 MCB_BUT_CONFIRM = 27  # Middle close to WHITE side
 MCB_BUT_BACK = 23  # Middle close to BLACK side
 MCB_BUT_BLACK = 22  # Closest to BLACK side
-MCB_BUT_DEBOUNCE = 200  # Button debounce
+MCB_BUT_DEBOUNCE = 150  # Button debounce
 MCB_FIELD_DEBOUNCE = 50  # Field debounce
 
 """! @brief     Board fields and leds"""
@@ -58,8 +58,8 @@ def parser():
     # Construct the argument parse and return the arguments
     args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description=description)
 
-    args.add_argument("-i", "--input", type=str, default="/home/pi/mChessBoard/src/stockfish-rpiz",
-                        help="path to stockfish executable")
+    args.add_argument("-i", "--input", type=str, default="/home/pi/mChessBoard/src/minic_3.04_linux_x32_armv6",
+                        help="path to ai engine")
     args.add_argument("-d", "--debug", action='store_true',
                         help="debug printout")
     args.add_argument("-a", "--auto_confirm", action='store_true',
@@ -517,7 +517,7 @@ class ChessBoardFsm(StateMachine):
     # Initialize all transitions allowed
     go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init) | undo_move.to(init)
     go_to_difficulty = init.to(difficulty) | setup.to(difficulty)
-    go_to_setup = difficulty.to(setup)
+    go_to_setup = difficulty.to(setup) | init.to(setup)
     go_to_ai_move = setup.to(ai_move) | human_move.to(ai_move) | pawn_promotion.to(ai_move)
     go_to_human_move = setup.to(human_move) | ai_move.to(human_move) | undo_move.to(human_move) | pawn_promotion.to(human_move)
     go_to_checkmate = human_move.to(checkmate) | ai_move.to(checkmate)
@@ -558,20 +558,19 @@ if __name__ == "__main__":
     current_state = None
 
     # Movement global variables and flags
-    move_stockfish = ""     ### Move made by Stockfish AI
+    move_ai = ""           ### Move made by Engine
     move_human = ""         ### Move made by Human
     move_undo = ""          ### Move made by Undo
-    moves = []              ### List of moves for stockfish
+    moves = []              ### List of moves for engine
     play_difficulty = 1     ### Default difficulty
 
-    # Stockfish setup
+    # Evaluation Engine Setup
     stockfish = None
-    stockfish_exe = args.input
-    stockfish_parameters = {"Threads": 1, 
-                            "Minimum Thinking Time": 30,
-                            "Skill Level": play_difficulty,
-                            "UCI_LimitStrength": "false", 
-                            "UCI_Elo": 1350}
+    stockfish_param = {}
+
+    # AI Engine setup
+    ai = None
+    ai_parameters = {}
 
     # Main loop
     while True:
@@ -588,7 +587,7 @@ if __name__ == "__main__":
             if first_entry:
                 print(f"State: {fsm.current_state.identifier}")
                 # Reset AI move instance
-                move_stockfish = ""
+                move_ai = ""
                 # Reset Human move instance
                 move_human = ""
                 # Reset moves list
@@ -613,22 +612,56 @@ if __name__ == "__main__":
             
             elif GPIO.event_detected(MCB_BUT_CONFIRM):
 
-                # Confirm and change state
                 print(f"Confirm {play_difficulty}")
-                if play_difficulty <= 2:
-                    if args.debug: print(f"Using Skill Level: {play_difficulty}")
-                    stockfish_parameters.update({"UCI_LimitStrength": "false"})
-                    stockfish_parameters.update({"Skill Level": play_difficulty})
-                else:
-                    if args.debug: print(f"Using ELO rating: {play_difficulty * 50 + 1250}")
-                    stockfish_parameters.update({"UCI_LimitStrength": "true"})
-                    stockfish_parameters.update({"UCI_Elo": play_difficulty * 50 + 1200})       # 1350 to 2850 (limit here is 1600, enough for me)
-                
-                # Initiate stockfish engine
+
                 board.set_leds("12345678abcdefgh")
-                stockfish = Stockfish(stockfish_exe, parameters=stockfish_parameters)
-                if args.debug: print(stockfish.get_parameters())
+
+                if "stockfish" in args.input:
+
+                    print("Using Stockfish Engine")
+                    
+                    if play_difficulty <= 2:
+                        if args.debug: print(f"Using Skill Level: {play_difficulty}")
+                        ai_parameters.update({"UCI_LimitStrength": "false"})
+                        ai_parameters.update({"Skill Level": play_difficulty})
+                    else:
+                        if args.debug: print(f"Using ELO rating: {play_difficulty * 50 + 1250}")
+                        ai_parameters.update({"UCI_LimitStrength": "true"})
+                        ai_parameters.update({"UCI_Elo": play_difficulty * 50 + 1200})       # 1350 to 2850 (limit here is 1600, enough for me)
+                    
+                    # Initiate stockfish engine
+                    #uci = Stockfish(args.input, parameters=uci_parameters)
+                    #uci.set_depth(1)
+                    #if args.debug: print(uci.get_parameters())
+                    
+                    
+                
+                elif "minic" in args.input:
+                    
+                    print("Using Minic Engine")
+
+                    if play_difficulty == 0:
+                        if args.debug: print(f"Using Level: {play_difficulty}")
+                        ai_parameters.update({"UCI_LimitStrength": "false"})
+                        ai_parameters.update({"Level": play_difficulty})
+                    else:
+                        if args.debug: print(f"Using ELO rating: {play_difficulty * 100 + 400}")
+                        ai_parameters.update({"UCI_LimitStrength": "true"})
+                        ai_parameters.update({"UCI_Elo": play_difficulty * 100 + 400})       # 500 to 2800 (limit here is 1300, enough for me)
+
+                    # Initiate ai engine
+                    ai = Stockfish(args.input, parameters=ai_parameters)
+                    if args.debug: print(ai.get_parameters())
+
+                    # Init. eval engine
+                    stockfish = Stockfish("/home/pi/mChessBoard/src/stockfish-12_linux_x32_armv6", parameters=ai_parameters)
+
+                else:
+
+                    print("Unknown engine")
+
                 board.set_leds("")
+                
                 fsm.go_to_setup()
 
             elif GPIO.event_detected(MCB_BUT_BLACK):
@@ -717,7 +750,7 @@ if __name__ == "__main__":
                     # Take a time stamp
                     timer = time.time()
                     # Check for correctness (could be pawn promotion)
-                    if stockfish.is_move_correct(move_human) or stockfish.is_move_correct(move_human+'q'):
+                    if stockfish.is_move_correct(move_human) or ai.is_move_correct(move_human+'q'):
                         move_human = move_human
                     # Check for correctness opposite if fields are obtained in opposite direction (could be pawn promotion)
                     elif stockfish.is_move_correct(move_human_opposite) or stockfish.is_move_correct(move_human_opposite+'q'):
@@ -729,13 +762,14 @@ if __name__ == "__main__":
                 if args.debug: print(f"humanmove: {move_human}")
 
             # If black or white is pressed
-            elif GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) or args.auto_confirm and len(move_human) == 4:
+            elif (GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) or args.auto_confirm) and len(move_human) == 4:
                 print(f"Event: Confirm human move: {move_human}")
                 board.read_fields()
                 if board.is_move_done(move_human, moves):
                     if stockfish.is_move_correct(move_human):
                         moves.append(move_human)
                         stockfish.set_position(moves)
+                        ai.set_position(moves)
                         board.set_move_done_leds(move_human)
                         move_human = ""
                         if args.debug: board.full_display(stockfish.get_board_visual())
@@ -754,7 +788,7 @@ if __name__ == "__main__":
             elif GPIO.event_detected(MCB_BUT_CONFIRM):
                 print("Event: Hint or AI move")
                 board.remove_field_events()
-                move_stockfish = stockfish.get_best_move()
+                move_ai = ai.get_best_move()
                 fsm.go_to_ai_move()
 
             elif GPIO.event_detected(MCB_BUT_BACK):
@@ -773,20 +807,21 @@ if __name__ == "__main__":
             # Handle the led flash indicator timing
             if time.time() > timer + MCB_PLAY_AI_LED_TOGGLE_TIME:
                 toggle = not toggle
-                board.set_move_led(toggle, move_stockfish)
+                board.set_move_led(toggle, move_ai)
                 timer = time.time()
 
             # Confirm AI/hint move
             if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
-                print(f"Confirm AI move: {move_stockfish}")
+                print(f"Confirm AI move: {move_ai}")
                 board.read_fields()
-                if board.is_move_done(move_stockfish, moves):
+                if board.is_move_done(move_ai, moves):
                     board.board_prev = board.board_current
-                    if stockfish.is_move_correct(move_stockfish):
-                        moves.append(move_stockfish)
+                    if stockfish.is_move_correct(move_ai):
+                        moves.append(move_ai)
                         stockfish.set_position(moves)
-                        board.set_move_done_leds(move_stockfish)
-                        move_stockfish = ""
+                        ai.set_position(moves)
+                        board.set_move_done_leds(move_ai)
+                        move_ai = ""
                         if args.debug: board.full_display(stockfish.get_board_visual())
                         if stockfish.get_evaluation() == {"type": "mate", "value": 0}:
                             fsm.go_to_checkmate()
@@ -829,12 +864,12 @@ if __name__ == "__main__":
                     else:
                         board.set_move_done_leds(moves[-1])
                         move_human = ""
-                        move_stockfish = ""
+                        move_ai = ""
                         fsm.go_to_human_move()
                 else:
                     board.set_leds("")
                     move_human = ""
-                    move_stockfish = ""
+                    move_ai = ""
                     fsm.go_to_human_move()
 
             # Handle the led flash indicator timing
@@ -850,6 +885,7 @@ if __name__ == "__main__":
                     move_undo = ""
                     del moves[-1]
                     stockfish.set_position(moves)
+                    ai.set_position(moves)
                     if len(moves) > 0: 
                         board.set_move_done_leds(moves[-1])
                     else:
