@@ -234,7 +234,7 @@ class ChessBoard(StateMachine):
 
     def get_field_event(self):
 
-        """! Determine what happends on the field
+        """! Determine what happens on the field
         
         @return changed field value
         """
@@ -248,8 +248,6 @@ class ChessBoard(StateMachine):
         # Determine what field changed based on board vs prev board
         for letter in range(8):
             for digit in range(8):
-                #if args.debug: print(f"self.board_current[letter][digit]: {self.board_current[letter][digit]}")
-                #if args.debug: print(f"self.board_prev[letter][digit]: {self.board_prev[letter][digit]}")
                 if self.board_current[letter][digit] != self.board_prev[letter][digit]:
                     # Safe the last analysed changed field
                     field_value = chr(letter + 97) + chr(digit + 49)
@@ -260,29 +258,32 @@ class ChessBoard(StateMachine):
 
         return field_value
 
-    def set_move_led(self, toggle: bool, move: str):
+    def set_move_led(self, toggle_led: bool, move: str):
 
         """! Indicate the given move with leds """
 
-        if toggle:
+        if toggle_led:
             self.set_leds(move[0] + move[1])
         else:
             self.set_leds(move[0] + move[1] + move[2] + move[3])
 
     def set_move_done_leds(self, move: str):
 
-        """! Set leds when move is done """
+        """! Set leds when move is done
+
+        @param move         The current move to check
+        """
 
         if len(move) == 4:
             self.set_leds(move[2] + move[3])
 
-    def is_castling(self, move: str, moves: list):
+    def is_castling(self, move: str, all_moves: list):
 
         """! @brief     Check move for castling 
         
-        @param move     The current move to check
-        @param moves    List of moves done so far to determine if a King has been moved
-        @return         True if castling
+        @param move         The current move to check
+        @param all_moves    List of moves done so far to determine if a King has been moved
+        @return             True if castling
         """
 
         black = True
@@ -291,7 +292,7 @@ class ChessBoard(StateMachine):
         # If any king has moved in the past, it is not a castle, this is in a 
         # scenario where a piece moves e.g. e1g1 and is not the king, 
         # then it is not a castle
-        for m in moves:
+        for m in all_moves:
             if (m[0] + m[1]) == "e1":
                 white = False
             if (m[0] + m[1]) == "e8":
@@ -504,6 +505,8 @@ class ChessBoard(StateMachine):
 
 class ChessBoardFsm(StateMachine):
 
+    """! @brief     Finite State Machine Class """
+
     # Initialize the states
     init = State('Init', initial=True)
     difficulty = State('Difficulty')
@@ -515,7 +518,7 @@ class ChessBoardFsm(StateMachine):
     undo_move = State('Undo')
 
     # Initialize all transitions allowed
-    go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init) | undo_move.to(init)
+    go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init) | pawn_promotion.to(init) | undo_move.to(init)
     go_to_difficulty = init.to(difficulty) | setup.to(difficulty)
     go_to_setup = difficulty.to(setup) | init.to(setup)
     go_to_ai_move = setup.to(ai_move) | human_move.to(ai_move) | pawn_promotion.to(ai_move)
@@ -526,7 +529,7 @@ class ChessBoardFsm(StateMachine):
 
 def signal_handler(sig, frame):
 
-    """! @brief    Exit function"""
+    """! @brief    Exit function """
 
     print(' SIGINT or CTRL-C detected. Exiting gracefully')
     GPIO.cleanup()
@@ -548,8 +551,6 @@ if __name__ == "__main__":
 
     # Parse arguments
     args = parser()
-
-    
 
     # Flags & Variables
     initial = True
@@ -767,10 +768,10 @@ if __name__ == "__main__":
                 board.read_fields()
                 if board.is_move_done(move_human, moves):
                     if stockfish.is_move_correct(move_human):
+                        board.set_move_done_leds(move_human)
                         moves.append(move_human)
                         stockfish.set_position(moves)
                         ai.set_position(moves)
-                        board.set_move_done_leds(move_human)
                         move_human = ""
                         if args.debug: board.full_display(stockfish.get_board_visual())
                         if stockfish.get_evaluation() == {"type": "mate", "value": 0}:
@@ -817,10 +818,10 @@ if __name__ == "__main__":
                 if board.is_move_done(move_ai, moves):
                     board.board_prev = board.board_current
                     if stockfish.is_move_correct(move_ai):
+                        board.set_move_done_leds(move_ai)
                         moves.append(move_ai)
                         stockfish.set_position(moves)
                         ai.set_position(moves)
-                        board.set_move_done_leds(move_ai)
                         move_ai = ""
                         if args.debug: board.full_display(stockfish.get_board_visual())
                         if stockfish.get_evaluation() == {"type": "mate", "value": 0}:
