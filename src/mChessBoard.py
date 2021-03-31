@@ -14,6 +14,7 @@ VERSION = "v1.0.0"
 DATE = "Jan 01 2021 19:01"
 
 """! @brief     Stockfish default parameters """
+
 DEFAULT_STOCKFISH_PARAMS = {
     "Write Debug Log": "false",
     "Contempt": 0,
@@ -48,7 +49,7 @@ MCB_BUT_WHITE = 17  # Closest to WHITE side
 MCB_BUT_CONFIRM = 27  # Middle close to WHITE side
 MCB_BUT_BACK = 23  # Middle close to BLACK side
 MCB_BUT_BLACK = 22  # Closest to BLACK side
-MCB_BUT_DEBOUNCE = 150  # Button debounce
+MCB_BUT_DEBOUNCE = 200  # Button debounce
 MCB_FIELD_DEBOUNCE = 50  # Field debounce
 
 """! @brief     Board fields and leds"""
@@ -90,6 +91,7 @@ def parser():
 
 class ChessBoard(StateMachine):
 
+
     def __init__(self):
 
         """! The Contructor """
@@ -101,11 +103,11 @@ class ChessBoard(StateMachine):
         # Declare board 2D lists #TODO REDO THIS WITH FEN
         self.board_current = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
         self.board_prev = self.board_current
-        self.board_undo = [self.board_current]
+        self.board_history = [self.board_current]
 
         #self.fen_board_current = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         #self.fen_board_prev = self.fen_board_current
-        #self.fen_board_undo = [self.fen_board_current]
+        #self.fen_board_history = [self.fen_board_current]
 
         # Default board setup (False == Place piece)
         self.setup = [False, False, True, True, True, True, False, False]
@@ -129,6 +131,7 @@ class ChessBoard(StateMachine):
         GPIO.setup(MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
+
     def add_button_events(self):
 
         """! Add events to all buttons """
@@ -145,6 +148,7 @@ class ChessBoard(StateMachine):
         GPIO.add_event_detect(MCB_BUT_BACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
         GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
 
+
     def remove_button_events(self):
 
         """! Remove events from all buttons """
@@ -153,6 +157,7 @@ class ChessBoard(StateMachine):
         GPIO.remove_event_detect(MCB_BUT_CONFIRM)
         GPIO.remove_event_detect(MCB_BUT_BACK)
         GPIO.remove_event_detect(MCB_BUT_BLACK)
+
 
     def add_field_events(self):
 
@@ -167,6 +172,7 @@ class ChessBoard(StateMachine):
         GPIO.add_event_detect(MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
         GPIO.add_event_detect(MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
 
+
     def remove_field_events(self):
 
         """! Remove events from all chess fields """
@@ -175,6 +181,7 @@ class ChessBoard(StateMachine):
         GPIO.remove_event_detect(MCB_ROW_CD_IO)
         GPIO.remove_event_detect(MCB_ROW_EF_IO)
         GPIO.remove_event_detect(MCB_ROW_GH_IO)
+
 
     def startup_leds(self, delay):
 
@@ -217,6 +224,7 @@ class ChessBoard(StateMachine):
             
             time.sleep(delay)
 
+
     def read_fields(self):
 
         """! Read all the chess fields and save the current value """
@@ -233,6 +241,7 @@ class ChessBoard(StateMachine):
 
         # Update current board
         self.board_current = [self.a, self.b, self.c, self.d, self.e, self.f, self.g, self.h]
+
 
     def get_field_event(self):
 
@@ -253,12 +262,46 @@ class ChessBoard(StateMachine):
                 if self.board_current[letter][digit] != self.board_prev[letter][digit]:
                     # Safe the last analysed changed field
                     field_value = chr(letter + 97) + chr(digit + 49)
-                    if args.debug: print(f"{debug_msg}Field changed: {field_value} [{self.board_current[letter][digit]}]")
+                    if args.debug: print(f"{debug_msg}field changed: {field_value} -> [{self.board_current[letter][digit]}]")
 
         if field_value != "":
             board.board_prev = board.board_current
 
         return field_value
+
+
+    def set_promotion_menu_led(self, toggle_led: bool, move: str, looper):
+
+        """! Indicate the promotion piece with LEDs 
+        
+        @param  toggle_led  Boolean toggle flag
+        @param  move        The move to determine
+
+        @return             Move with promotion surfix for engine e.g. 'g7g8q'
+        """
+
+        leds = 'abcd'   # The led fields to use
+
+        if looper == 0: promotion = 'q' # queen promotion
+        elif looper == 1: promotion = 'b' # bishop promotion
+        elif looper == 2: promotion = 'n' # knight promotion
+        elif looper == 3: promotion = 'r' # rook promotion
+        else: promotion = move[4]   # get the promotion from ai move
+
+        if promotion == 'q': field = 'd' # light on d field
+        elif promotion == 'b': field = 'c' # light on c field
+        elif promotion == 'n': field = 'b' # light on b field
+        elif promotion == 'r': field = 'a' # light on a field
+
+        if toggle_led: self.set_leds(leds) # light all leds
+        else: self.set_leds(leds.replace(field, "")) # flash with selection
+            
+        if len(move) == 4:
+            return move + promotion
+        else:
+            return_mode = move[:4] + promotion
+            return return_mode
+
 
     def set_move_led(self, toggle_led: bool, move: str):
 
@@ -273,6 +316,7 @@ class ChessBoard(StateMachine):
         else:
             self.set_leds(move[0] + move[1] + move[2] + move[3])
 
+
     def set_move_done_leds(self, move: str):
 
         """! Set LEDs for field when move is done
@@ -282,6 +326,7 @@ class ChessBoard(StateMachine):
 
         if len(move) == 4:
             self.set_leds(move[2] + move[3])
+
 
     def is_castling(self, move: str, all_moves: list):
 
@@ -312,6 +357,7 @@ class ChessBoard(StateMachine):
         # Else just return False
         return False
 
+
     def is_undo_move_done(self):
 
         """! Function to determ if the undo move is done """
@@ -319,24 +365,28 @@ class ChessBoard(StateMachine):
         # Read board
         self.read_fields()
 
-        # Check if previous board match the board in history
-        if self.board_prev == self.board_undo[-1]:
-            if args.debug: print(f"{debug_msg}self.board_current == self.board_undo[-1]")
-            
+        # Setup current undo board, if undo on first move
+        current_undo = self.board_history[-2]
+
+        # Check if current board match board we are going to.
+        if (self.board_current == current_undo):
+                       
             # Update undo history
-            del self.board_undo[-1]
+            del self.board_history[-1]
 
             # Update prev status
-            if len(self.board_undo) > 0:
-                self.board_prev = self.board_undo[-1]
-            else:
-                self.board_prev = self.board_current
+            self.board_prev = self.board_history[-1]
             
+            # Finally return true
             return True
 
-        for i in range(8):
-            if args.debug: print(f"{debug_msg}self.board_current : {self.board_current[i]}")
-            if args.debug: print(f"{debug_msg}self.board_undo[-1]: {self.board_undo[-1][i]}")
+        if args.debug: 
+            for i in range(8):
+                print(f"{debug_msg}current_undo          : {current_undo[i]}")
+                print(f"{debug_msg}self.board_current    : {self.board_current[i]}")
+                #print(f"{debug_msg}self.board_prev       : {self.board_prev[i]}")
+                #print(f"{debug_msg}self.board_history[-1]: {self.board_history[-1][i]}")
+                print(debug_msg)
 
         return False
                 
@@ -387,6 +437,7 @@ class ChessBoard(StateMachine):
 
         return False
 
+
     def set_setup_leds(self):
 
         """! Setup/missing piece led indicators """
@@ -405,6 +456,7 @@ class ChessBoard(StateMachine):
         setup_leds = setup_leds + "g" if board.g == board.setup else setup_leds.replace("g", "")
         setup_leds = setup_leds + "h" if board.h == board.setup else setup_leds.replace("h", "")
         board.set_leds(setup_leds)
+
 
     def set_leds(self, led: str):
 
@@ -434,6 +486,7 @@ class ChessBoard(StateMachine):
         # Finally set the leds
         pcf_leds.port = port
 
+
     def set_difficulty_leds(self, difficulty: int):
 
         """! Difficulty led indicator 
@@ -447,6 +500,7 @@ class ChessBoard(StateMachine):
             led_string = led_string + str(i + 1)
 
         self.set_leds(led_string)
+
 
     def display(self):
 
@@ -474,6 +528,7 @@ class ChessBoard(StateMachine):
         print(f"+---+---+---+---+---+---+---+---+  ")
         print(f"| {' ' if self.a[0] else 'x'} | {' ' if self.b[0] else 'x'} | {' ' if self.c[0] else 'x'} | {' ' if self.d[0] else 'x'} | {' ' if self.e[0] else 'x'} | {' ' if self.f[0] else 'x'} | {' ' if self.g[0] else 'x'} | {' ' if self.h[0] else 'x'} | 1")
         print(f"+---+---+---+---+---+---+---+---+  ")
+
 
     def full_display(self, sf):
 
@@ -505,6 +560,7 @@ class ChessBoard(StateMachine):
         print(f"| {' ' if self.a[0] else 'x'} | {' ' if self.b[0] else 'x'} | {' ' if self.c[0] else 'x'} | {' ' if self.d[0] else 'x'} | {' ' if self.e[0] else 'x'} | {' ' if self.f[0] else 'x'} | {' ' if self.g[0] else 'x'} | {' ' if self.h[0] else 'x'} | 1   {sf[509:544]}")
         print(f"+---+---+---+---+---+---+---+---+     {sf[544:577]}")
 
+
 class ChessBoardFsm(StateMachine):
 
     """! @brief     Finite State Machine Class """
@@ -529,6 +585,7 @@ class ChessBoardFsm(StateMachine):
     go_to_pawn_promotion = human_move.to(pawn_promotion) | ai_move.to(pawn_promotion)
     go_to_undo_move = human_move.to(undo_move) | ai_move.to(undo_move)
 
+
 def signal_handler(sig, frame):
 
     """! @brief    Exit function """
@@ -537,6 +594,7 @@ def signal_handler(sig, frame):
     GPIO.cleanup()
     board.set_leds("")
     sys.exit(0)
+
 
 if __name__ == "__main__":
 
@@ -564,6 +622,7 @@ if __name__ == "__main__":
     move_ai = ""           ### Move made by Engine
     move_human = ""         ### Move made by Human
     move_undo = ""          ### Move made by Undo
+    move_promotion = ""     ### Move made by Promotion
     moves = []              ### List of moves for engine
     play_difficulty = 1     ### Default difficulty
 
@@ -598,7 +657,6 @@ if __name__ == "__main__":
                 moves = [] # Reset moves list
                 board.add_button_events() # Add button events (delays the setup init)
                 board.startup_leds(0.05) # Run the LEDs in a startup sequence
-                board.board_undo = [] # Reset undo history
 
             fsm.go_to_difficulty() # Set next state
 
@@ -682,6 +740,8 @@ if __name__ == "__main__":
                 
                 board.set_leds("abcdefgh12345678") # Turn on all LEDs
                 board.board_prev = board.board_current # Set previous board to current board
+                board.board_history = [] # Reset undo history
+                board.board_history.append(board.board_current)
                 time.sleep(1) # Wait a sec
                 board.set_leds("") # Turn off the LEDs
                 
@@ -719,7 +779,7 @@ if __name__ == "__main__":
                GPIO.event_detected(MCB_ROW_EF_IO) or GPIO.event_detected(MCB_ROW_GH_IO):
                 
                 human_move_field = board.get_field_event() # Get the specific field event (single field change)
-                if args.debug: print(f"{debug_msg}event - field changed {human_move_field}")
+                if args.debug: print(f"{debug_msg}event - field changed: {human_move_field}")
 
                 # If first event and not an empty event
                 if len(move_human) == 0 and human_move_field != "":
@@ -739,10 +799,11 @@ if __name__ == "__main__":
                     elif stockfish.is_move_correct(move_human_opposite) or stockfish.is_move_correct(move_human_opposite+'q'):
                         move_human = move_human_opposite
                 
-                if args.debug: print(f"{debug_msg}humanmove: {move_human}")
+                if args.debug: print(f"{debug_msg}human move: {move_human}")
 
             # If black or white is pressed to confirm move, or auto_confirm is active
-            elif (GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) or args.auto_confirm) and len(move_human) == 4:
+            elif (GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) or \
+                 args.auto_confirm) and len(move_human) == 4:
 
                 if args.debug: print(f"{debug_msg}event - confirm human move: {move_human}")
                 board.read_fields() # Read and update fields
@@ -757,7 +818,7 @@ if __name__ == "__main__":
                         if args.debug: board.full_display(stockfish.get_board_visual())
                         if stockfish.get_evaluation() == {"type": "mate", "value": 0}: # Evaluate if there is a checkmate
                             fsm.go_to_checkmate() # Change state
-                        board.board_undo.append(board.board_current) # Add the current board to the undo history list
+                        board.board_history.append(board.board_current) # Add the current board to the undo history list
                     
                     # Check for pawn promotion
                     elif stockfish.is_move_correct(move_human+'q'):
@@ -768,18 +829,22 @@ if __name__ == "__main__":
                         print(f"{debug_msg}move not done")
 
             elif GPIO.event_detected(MCB_BUT_CONFIRM):
-                print(f"{debug_msg}event - hint/AI move")
+                print(f"{debug_msg}event - hint/ai move")
                 board.remove_field_events()
                 move_ai = ai.get_best_move()
                 fsm.go_to_ai_move()
 
             elif GPIO.event_detected(MCB_BUT_BACK):
-                print(f"{debug_msg}event - undo")
+                if args.debug: print(f"{debug_msg}event - undo")
                 if args.debug: board.full_display(stockfish.get_board_visual())
                 fsm.go_to_undo_move()
 
-        # STATE: AI Move
         elif fsm.is_ai_move:
+
+            """! @brief     Handle AI moves 
+            
+            @info   Indicate movements and get confirm signals.
+            """
 
             if first_entry:
                 print(f"STATE: {fsm.current_state.identifier}")
@@ -797,9 +862,11 @@ if __name__ == "__main__":
             # Confirm AI/hint move
             if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
 
-                if args.debug: print(f"{debug_msg}event - confirm AI move: {move_ai}")
+                if args.debug: print(f"{debug_msg}event - confirm ai move: {move_ai}")
                 board.read_fields()
-                if board.is_move_done(move_ai, moves):
+                if len(move_ai) == 5:
+                    fsm.go_to_pawn_promotion()
+                elif board.is_move_done(move_ai, moves):
                     board.board_prev = board.board_current
                     if stockfish.is_move_correct(move_ai):
                         board.set_move_done_leds(move_ai)
@@ -812,83 +879,155 @@ if __name__ == "__main__":
                             fsm.go_to_checkmate()
                         else:
                             fsm.go_to_human_move()
-                        board.board_undo.append(board.board_current)
+                        board.board_history.append(board.board_current)
                 else:
                     if args.debug: board.display()
 
             elif GPIO.event_detected(MCB_BUT_BACK):
-                print("Event: Undo")
+                if args.debug: print(f"{debug_msg}event - undo")
+                if args.debug: board.full_display(stockfish.get_board_visual())
                 fsm.go_to_undo_move()
 
         elif fsm.is_pawn_promotion:
 
-            if first_entry:
-                print(f"State: {fsm.current_state.identifier}")
-                print(prev_state)
-                if prev_state.value == 'human_move':
-                    print("From Human")
-                elif prev_state.value == 'ai_move':
-                    print("From AI")
-                
+            """! @brief     Handle undo moves. 
             
+            @info   Indicate movements and get confirm signals.
+            """
 
-            # Handle human (Human makes a choice)
+            if first_entry:
+                print(f"STATE: {fsm.current_state.identifier}")
+                if prev_state.value == 'human_move':
+                    if args.debug: print(f"{debug_msg}from human move state: {move_human}")
+                    move_promotion = move_human
+                    move_human_flag = True
+                    promotion_loop = 0
+                elif prev_state.value == 'ai_move':
+                    if args.debug: print(f"{debug_msg}from ai move state: {move_ai}")
+                    move_promotion = move_ai
+                    move_human_flag = False
+                    promotion_loop = -1
+                else:
+                    fsm.go_to_human_move() # Change state
+                timer = time.time()
 
-            # Handle AI (AI shows what piece is chosen)
+            # Handle the led flash indicator timing
+            if (time.time() > timer + MCB_PLAY_AI_LED_TOGGLE_TIME):
+                toggle = not toggle
+                move_promotion = board.set_promotion_menu_led(toggle, move_promotion, promotion_loop)
+                timer = time.time()
+            
+            if GPIO.event_detected(MCB_BUT_BLACK) and move_human_flag:
 
-        # STATE: Undo move
+                if promotion_loop < 3: promotion_loop += 1 # Increment promotion
+                else: promotion_loop = 0
+                if args.debug: print(f"{debug_msg}promotion : {promotion_loop}")
+
+            elif GPIO.event_detected(MCB_BUT_WHITE) and move_human_flag:
+
+                if promotion_loop > 0: promotion_loop -= 1 # Decrement promotion
+                else: promotion_loop = 3
+                if args.debug: print(f"{debug_msg}promotion : {promotion_loop}")
+
+            elif GPIO.event_detected(MCB_BUT_CONFIRM):
+
+                if args.debug: print(f"{debug_msg}q: 0, b: 1, k:2, r:3")
+                if args.debug: print(f"{debug_msg}choice: {promotion_loop}")
+
+                board.read_fields() # Read and update fields
+                if board.is_move_done(move_promotion[:4], moves):
+                    if stockfish.is_move_correct(move_promotion):
+                            if args.debug: print(f"{debug_msg}stockfish - move correct")
+                            board.set_move_done_leds(move_promotion[:4]) # Set the field LEDs
+                            moves.append(move_promotion) # Add the move to the moves list
+                            stockfish.set_position(moves) # Set position in Stockfish
+                            ai.set_position(moves) # Set position in AI
+                            move_human = "" # Reset human move
+                            move_ai = "" # Reset ai move
+                            if args.debug: board.full_display(stockfish.get_board_visual())
+                            if stockfish.get_evaluation() == {"type": "mate", "value": 0}: # Evaluate if there is a checkmate
+                                fsm.go_to_checkmate() # Change state
+                            else:
+                                fsm.go_to_human_move() # Change state
+                            board.board_history.append(board.board_current) # Add the current board to the undo history list
+                            
+                else:
+                    if args.debug: board.display()
+
+            elif GPIO.event_detected(MCB_BUT_BACK):
+                if args.debug: print(f"{debug_msg}event - undo")
+                if args.debug: board.full_display(stockfish.get_board_visual())
+                fsm.go_to_undo_move()
+
+
         elif fsm.is_undo_move:
 
+            """! @brief     Handle undo moves. 
+            
+            @info   Indicate movements and get confirm signals.
+            """
+
             if first_entry:
-                print(f"State: {fsm.current_state.identifier}")
+                print(f"STATE: {fsm.current_state.identifier}")
                 timer = time.time()
                 toggle = True
+                move_human = ""
+                move_ai = ""
+                move_undo = ""
+
+                # Check if any moves has been made
                 if len(moves) > 0:
-                    if len(moves[-1]) == 4:
+                    if len(moves[-1]) >= 4:
+                        # Determine the mode to undo, and to indicate with LED flashing.
                         move_undo = moves[-1][2] + moves[-1][3] + moves[-1][0] + moves[-1][1]
                     else:
+                        # Cancelling a non-finished move, 
+                        # just set LEDs and change state.
                         board.set_move_done_leds(moves[-1])
-                        move_human = ""
-                        move_ai = ""
                         fsm.go_to_human_move()
                 else:
-                    board.set_leds("")
-                    move_human = ""
-                    move_ai = ""
+                    # Cancelling unfinished first move, 
+                    # just turn off LEDs and change state.
+                    board.set_leds("") 
                     fsm.go_to_human_move()
 
             # Handle the led flash indicator timing
-            if time.time() > timer + MCB_PLAY_AI_LED_TOGGLE_TIME and len(move_undo) == 4:
+            if (time.time() > timer + MCB_PLAY_AI_LED_TOGGLE_TIME) and (len(move_undo) == 4):
                 toggle = not toggle
                 board.set_move_led(toggle, move_undo)
                 timer = time.time()
           
             # Confirm Undo move
             if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
-                print(f"Confirm Undo move: {move_undo}")
-                if board.is_undo_move_done():
-                    move_undo = ""
-                    del moves[-1]
-                    stockfish.set_position(moves)
-                    ai.set_position(moves)
-                    if len(moves) > 0: 
+                if args.debug: print(f"{debug_msg}confirm undo move: {move_undo}")
+                if board.is_undo_move_done(): # If the undo move is done
+                    del moves[-1] # Delete last move for the engines
+                    stockfish.set_position(moves) # Set the moved for eval engine
+                    ai.set_position(moves) # Set the moved for ai engine
+                    if len(moves) > 0: # Check if the deleted move was the last one.
                         board.set_move_done_leds(moves[-1])
                     else:
                         board.set_leds("")
                     if args.debug: board.full_display(stockfish.get_board_visual())
-                    fsm.go_to_human_move()
+                    fsm.go_to_human_move() # Change state
                 else:
                     if args.debug: board.display()
 
             elif GPIO.event_detected(MCB_BUT_BACK):
-                print("Event: Cancel Undo")
+                if args.debug: print(f"{debug_msg}event - cancel undo")
+                board.set_move_done_leds(moves[-1])
                 fsm.go_to_human_move()
 
         # STATE: Checkmate
         elif fsm.is_checkmate:
 
+            """! @brief     Handle checkmate. 
+            
+            @info   Flash the LEDs for indication and go to init when button is pressed.
+            """
+
             if first_entry:
-                print(f"State: {fsm.current_state.identifier}")
+                print(f"STATE: {fsm.current_state.identifier}")
                 timer = time.time()
                 toggle = True
 
@@ -906,7 +1045,7 @@ if __name__ == "__main__":
                GPIO.event_detected(MCB_BUT_CONFIRM) or \
                GPIO.event_detected(MCB_BUT_BACK):
 
-                print("Go to init")
+                if args.debug: print(f"{debug_msg}go to init")
                 board.remove_button_events()
                 board.remove_field_events()
                 fsm.go_to_init()
@@ -917,7 +1056,7 @@ if __name__ == "__main__":
            not GPIO.input(MCB_BUT_CONFIRM) and \
            not GPIO.input(MCB_BUT_BACK):
 
-            print("Resetting")
+            if args.debug: print(f"{debug_msg}resetting")
             board.set_leds("abcdefgh12345678")
             board.remove_button_events()
             board.remove_field_events()
