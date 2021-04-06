@@ -1,5 +1,6 @@
 """
     This module implements the Stockfish class.
+
     :copyright: (c) 2016-2021 by Ilya Zhelyabuzhsky.
     :license: MIT, see LICENSE for more details.
 """
@@ -8,6 +9,17 @@ import subprocess
 from typing import Any, List, Optional
 
 DEFAULT_STOCKFISH_PARAMS = {
+    "Write Debug Log": "false",
+    "Contempt": 0,
+    "Min Split Depth": 0,
+    "Threads": 1,
+    "Ponder": "false",
+    "Hash": 16,
+    "MultiPV": 1,
+    "Skill Level": 20,
+    "Move Overhead": 30,
+    "Minimum Thinking Time": 20,
+    "Slow Mover": 80,
     "UCI_Chess960": "false",
 }
 
@@ -40,6 +52,7 @@ class Stockfish:
 
     def get_parameters(self) -> dict:
         """Returns current board position.
+
         Returns:
             Dictionary of current Stockfish engine's parameters.
         """
@@ -86,6 +99,7 @@ class Stockfish:
 
     def set_position(self, moves: List[str] = None) -> None:
         """Sets current board position.
+
         Args:
             moves:
               A list of moves to set this position on the board.
@@ -99,6 +113,7 @@ class Stockfish:
 
     def get_board_visual(self) -> str:
         """Returns a visual representation of the current board position.
+
         Returns:
             String of visual representation of the chessboard with its pieces in current position.
         """
@@ -114,6 +129,7 @@ class Stockfish:
 
     def get_fen_position(self) -> str:
         """Returns current board position in Forsyth–Edwards notation (FEN).
+
         Returns:
             String with current position in Forsyth–Edwards notation (FEN)
         """
@@ -126,9 +142,11 @@ class Stockfish:
 
     def set_skill_level(self, skill_level: int = 20) -> None:
         """Sets current skill level of stockfish engine.
+
         Args:
             skill_level:
               Skill Level option between 0 (weakest level) and 20 (full strength)
+
         Returns:
             None
         """
@@ -137,9 +155,11 @@ class Stockfish:
 
     def set_fen_position(self, fen_position: str) -> None:
         """Sets current board position in Forsyth–Edwards notation (FEN).
+
         Args:
             fen_position:
               FEN string of board position.
+
         Returns:
             None
         """
@@ -148,6 +168,7 @@ class Stockfish:
 
     def get_best_move(self) -> Optional[str]:
         """Returns best move with current position on the board.
+
         Returns:
             A string of move in algebraic notation or None, if it's a mate now.
         """
@@ -165,9 +186,11 @@ class Stockfish:
 
     def get_best_move_time(self, time: int = 1000) -> Optional[str]:
         """Returns best move with current position on the board after a determined time
+
         Args:
             time:
               Time for stockfish to determine best move in milliseconds (int)
+
         Returns:
             A string of move in algebraic notation or None, if it's a mate now.
         """
@@ -185,9 +208,11 @@ class Stockfish:
 
     def is_move_correct(self, move_value: str) -> bool:
         """Checks new move.
+
         Args:
             move_value:
               New move value in algebraic notation.
+
         Returns:
             True, if new move is correct, else False.
         """
@@ -203,6 +228,7 @@ class Stockfish:
 
     def get_evaluation(self) -> dict:
         """Evaluates current position
+
         Returns:
             A dictionary of the current advantage with "type" as "cp" (centipawns) or "mate" (checkmate in)
         """
@@ -213,7 +239,6 @@ class Stockfish:
             compare = 1
         else:  # stockfish shows advantage relative to current player, convention is to do white positive
             compare = -1
-        print(fen_position)
         self._put(f"position {fen_position}")
         self._go()
         while True:
@@ -231,6 +256,7 @@ class Stockfish:
 
     def set_depth(self, depth_value: int = 2) -> None:
         """Sets current depth of stockfish engine.
+
         Args:
             depth_value: Depth option higher than 1
         """
@@ -238,6 +264,7 @@ class Stockfish:
 
     def get_stockfish_major_version(self):
         """Returns Stockfish engine major version.
+
         Returns:
             Current stockfish major version
         """

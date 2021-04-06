@@ -5,7 +5,7 @@ import sys
 import RPi.GPIO as GPIO
 
 from statemachine import StateMachine, State
-from stockfish import Stockfish  # https://pypi.org/project/stockfish/
+from stockfish import Stockfish  # https://pypi.org/project/stockfish/ edited to fit for Minic
 from pcf8575 import PCF8575  # https://pypi.org/project/pcf8575/
 
 APP_TITLE = "mChessBoard"
@@ -71,7 +71,8 @@ def parser():
     """! @brief     Parser function to get all the arguments """
 
     # Description string
-    description = "Description: " + APP_TITLE + " " + VERSION + " " + DATE + " " + AUTHOR
+    description = "Description: " + APP_TITLE + " " + VERSION + " " + DATE + " " + AUTHOR + '\n' \
+                  "RPi.GPIO: " + GPIO.VERSION
 
     # Construct the argument parse and return the arguments
     args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description=description)
@@ -113,6 +114,9 @@ class ChessBoard(StateMachine):
         self.setup = [False, False, True, True, True, True, False, False]
         self.board_setup = [self.setup] * 8
 
+        # Event history
+        self.events = []
+
         # Set all inputs high on init
         pcf_row_ab.port = pcf_row_cd.port = pcf_row_ef.port = pcf_row_gh.port = [True] * 16
 
@@ -131,6 +135,21 @@ class ChessBoard(StateMachine):
         GPIO.setup(MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
+    def _button_callback(self, channel):
+        
+        """! Event callback to save events """
+
+        if args.debug: print(f"{debug_msg}event: {channel}")
+
+    def event_detected(self, channel):
+
+        """! My own event detected method, since the GPIO.RPi sucks """
+
+        if channel in self.events:
+            self.events.remove(channel)
+            return True
+
+        return False
 
     def add_button_events(self):
 
@@ -140,14 +159,19 @@ class ChessBoard(StateMachine):
         self.remove_button_events()
 
         # Small delay
-        time.sleep(0.5)
+        #time.sleep(0.5)
 
         # Add button events
-        GPIO.add_event_detect(MCB_BUT_WHITE, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(MCB_BUT_CONFIRM, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(MCB_BUT_BACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
+        #GPIO.add_event_detect(MCB_BUT_WHITE, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
+        #GPIO.add_event_detect(MCB_BUT_CONFIRM, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
+        #GPIO.add_event_detect(MCB_BUT_BACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
+        #GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
 
+        # Checker
+        GPIO.add_event_detect(MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
 
     def remove_button_events(self):
 
@@ -395,8 +419,10 @@ class ChessBoard(StateMachine):
 
         """! Function to determ if a move is done
         
-        @param move     The current move to check
-        @param moves    List of moves done so far, for castling check
+        @param move     The current move to check.
+        @param moves    List of moves done so far, for castling check.
+
+        @return True    If move is done.
         """
 
         # A move can only be "done" if the there is 4 chars
@@ -567,6 +593,8 @@ class ChessBoardFsm(StateMachine):
 
     # Initialize the states
     init = State('Init', initial=True)
+    mode = State('Mode')
+    human_color = State('Color')
     difficulty = State('Difficulty')
     setup = State('Setup')
     human_move = State("HumanMove")
@@ -576,9 +604,11 @@ class ChessBoardFsm(StateMachine):
     undo_move = State('Undo')
 
     # Initialize all transitions allowed
-    go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init) | pawn_promotion.to(init) | undo_move.to(init)
-    go_to_difficulty = init.to(difficulty) | setup.to(difficulty)
-    go_to_setup = difficulty.to(setup) | init.to(setup)
+    go_to_init = difficulty.to(init) | setup.to(init) | human_move.to(init) | ai_move.to(init) | checkmate.to(init) | pawn_promotion.to(init) | undo_move.to(init) | mode.to(init)
+    go_to_mode = init.to(mode)
+    go_to_human_color = mode.to(human_color)
+    go_to_difficulty = human_color.to(difficulty)
+    go_to_setup = difficulty.to(setup)
     go_to_ai_move = setup.to(ai_move) | human_move.to(ai_move) | pawn_promotion.to(ai_move)
     go_to_human_move = setup.to(human_move) | ai_move.to(human_move) | undo_move.to(human_move) | pawn_promotion.to(human_move)
     go_to_checkmate = human_move.to(checkmate) | ai_move.to(checkmate)
@@ -619,20 +649,49 @@ if __name__ == "__main__":
     current_state = None
 
     # Movement global variables and flags
-    move_ai = ""           ### Move made by Engine
-    move_human = ""         ### Move made by Human
-    move_undo = ""          ### Move made by Undo
-    move_promotion = ""     ### Move made by Promotion
-    moves = []              ### List of moves for engine
-    play_difficulty = 1     ### Default difficulty
+    move_ai = ""                ### Move made by AI Engine
+    move_human = ""             ### Move made by Human
+    move_undo = ""              ### Move made by Undo
+    move_promotion = ""         ### Move made by Promotion
+    moves = []                  ### List of moves for engine
+    play_difficulty = 1         ### Default difficulty
+
+    mode_setting = 0            ### Default mode setting 0: Human vs AI, 1: Human vs. Human
+    mode_human_color = 'white'  ### Default Human color
 
     # Evaluation Engine Setup
     stockfish = None
-    stockfish_param = {}
+    stockfish_param = {
+        "Write Debug Log": "false",
+        "Contempt": 0,
+        "Min Split Depth": 0,
+        "Threads": 1,
+        "Ponder": "false",
+        "Hash": 16,
+        "MultiPV": 1,
+        "Skill Level": 20,
+        "Move Overhead": 30,
+        "Minimum Thinking Time": 20,
+        "Slow Mover": 80,
+        "UCI_Chess960": "false",
+    }
 
     # AI Engine setup
     ai = None
-    ai_parameters = {}
+    ai_parameters = {
+        "Write Debug Log": "false",
+        "Contempt": 0,
+        "Min Split Depth": 0,
+        "Threads": 1,
+        "Ponder": "false",
+        "Hash": 16,
+        "MultiPV": 1,
+        "Skill Level": 20,
+        "Move Overhead": 30,
+        "Minimum Thinking Time": 20,
+        "Slow Mover": 80,
+        "UCI_Chess960": "false",
+    }
 
     # Main loop
     while True:
@@ -658,7 +717,71 @@ if __name__ == "__main__":
                 board.add_button_events() # Add button events (delays the setup init)
                 board.startup_leds(0.05) # Run the LEDs in a startup sequence
 
-            fsm.go_to_difficulty() # Set next state
+            fsm.go_to_mode() # Set next state
+
+        elif fsm.is_mode:
+
+            if first_entry:
+
+                print(f"STATE: {fsm.current_state.identifier}")
+
+                mode_setting = 0 # Reset mode
+
+                board.set_leds('4') # Set LED indicator
+            
+            if mode_setting == 1:
+                
+                if (GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE)):
+
+                    if args.debug: print(f"{debug_msg}human vs ai")
+                    mode_setting = 0    # Human vs AI
+                    board.set_leds('4') # Set LED indicator
+
+                elif GPIO.event_detected(MCB_BUT_CONFIRM):
+
+                    fsm.go_to_difficulty() # Change state
+
+            elif mode_setting == 0:
+
+                if (GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE)):
+
+                    if args.debug: print(f"{debug_msg}human vs human")
+                    mode_setting = 1    # Human vs Human
+                    board.set_leds('5') # Set LED indicator
+
+                elif GPIO.event_detected(MCB_BUT_CONFIRM):
+                    
+                    fsm.go_to_human_color() # Change state
+
+        elif fsm.is_human_color:
+
+            if first_entry:
+
+                print(f"STATE: {fsm.current_state.identifier}")
+                mode_human_color = 'white' # Reset color    
+                board.set_leds('1234') # Set LED indicator to white
+            
+            if mode_human_color == 'white':
+                
+                if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
+
+                    mode_human_color = 'black' # Human is black
+                    board.set_leds('5678') # Set LED indicator to black
+
+                elif GPIO.event_detected(MCB_BUT_CONFIRM):
+
+                    fsm.go_to_difficulty() # Change state
+
+            elif mode_human_color == 'black':
+                
+                if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
+
+                    mode_human_color = 'white' # Human white
+                    board.set_leds('1234') # Set LED indicator to white
+
+                elif GPIO.event_detected(MCB_BUT_CONFIRM):
+
+                    fsm.go_to_difficulty() # Change state
 
         elif fsm.is_difficulty:
 
@@ -830,6 +953,7 @@ if __name__ == "__main__":
 
             elif GPIO.event_detected(MCB_BUT_CONFIRM):
                 print(f"{debug_msg}event - hint/ai move")
+                board.set_leds("") # Turn off LEDs for indication
                 board.remove_field_events()
                 move_ai = ai.get_best_move()
                 fsm.go_to_ai_move()
@@ -860,10 +984,11 @@ if __name__ == "__main__":
                 timer = time.time()
 
             # Confirm AI/hint move
-            if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE):
+            if args.auto_confirm: board.read_fields()
+
+            if GPIO.event_detected(MCB_BUT_BLACK) or GPIO.event_detected(MCB_BUT_WHITE) or (args.auto_confirm and board.is_move_done(move_ai, moves)):
 
                 if args.debug: print(f"{debug_msg}event - confirm ai move: {move_ai}")
-                board.read_fields()
                 if len(move_ai) == 5:
                     fsm.go_to_pawn_promotion()
                 elif board.is_move_done(move_ai, moves):
