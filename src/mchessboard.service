@@ -1,0 +1,25 @@
+[Unit]
+
+Description=mChessBoard running as a service
+
+After=multi-user.target
+
+ 
+
+[Service]
+
+Type=idle
+
+ExecStart=/home/pi/mChessBoard/src/venv/bin/python /home/pi/mChessBoard/src/mChessBoard.py --auto_confirm
+
+StandardOutput=/home/pi/mChessBoard/output.log
+
+StandardError=/home/pi/mChessBoard/error.log
+
+SyslogIdentifier=mChessBoard
+
+ 
+
+[Install]
+
+WantedBy=multi-user.target
