@@ -1,3 +1,4 @@
 stockfish
 pcf8575
 RPi.GPIO
+python-statemachine
