@@ -4,52 +4,29 @@
     :author: Mick Kirkegaard.
 """
 
-import config
+from config import Config
 from pcf8575 import PCF8575  # https://pypi.org/project/pcf8575/
 import RPi.GPIO as GPIO
 from config import *
 import time
 
-"""! @brief     Play defines """
-MCB_PLAY_DIFF_MAX = 8
-MCB_PLAY_DIFF_MIN = 0
-MCB_PLAY_AI_LED_TOGGLE_TIME = 0.5  # sec
-MCB_PLAY_CHECKMATE_LED_TOGGLE_TIME = 0.2  # sec
-
-"""! @brief     Board defines """
-MCB_I2C_PORT_NUM = 1
-MCB_I2C_ROW_AB_ADDRESS = 0x23
-MCB_I2C_ROW_CD_ADDRESS = 0x22
-MCB_I2C_ROW_EF_ADDRESS = 0x21
-MCB_I2C_ROW_GH_ADDRESS = 0x20
-MCB_I2C_LEDS_ADDRESS = 0x24
-
-MCB_BUT_WHITE = 17  # Closest to WHITE side
-MCB_BUT_CONFIRM = 27  # Middle close to WHITE side
-MCB_BUT_BACK = 23  # Middle close to BLACK side
-MCB_BUT_BLACK = 22  # Closest to BLACK side
-MCB_BUT_DEBOUNCE = 200  # Button debounce
-MCB_FIELD_DEBOUNCE = 50  # Field debounce
-
-MCB_ROW_AB_IO = 6
-MCB_ROW_CD_IO = 13
-MCB_ROW_EF_IO = 19
-MCB_ROW_GH_IO = 26
-
 
 class Board():
 
-    def __init__(self, args):
+    def __init__(self, args: list(), cfg: Config):
 
         """
         Init. board fields and led drivers
         """
 
-        self.pcf_row_ab = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_AB_ADDRESS)
-        self.pcf_row_cd = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_CD_ADDRESS)
-        self.pcf_row_ef = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_EF_ADDRESS)
-        self.pcf_row_gh = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_ROW_GH_ADDRESS)
-        self.pcf_leds = PCF8575(MCB_I2C_PORT_NUM, MCB_I2C_LEDS_ADDRESS)
+        self.cfg = cfg
+        self.args = args
+
+        self.pcf_row_ab = PCF8575(cfg.MCB_I2C_PORT_NUM, cfg.MCB_I2C_ROW_AB_ADDRESS)
+        self.pcf_row_cd = PCF8575(cfg.MCB_I2C_PORT_NUM, cfg.MCB_I2C_ROW_CD_ADDRESS)
+        self.pcf_row_ef = PCF8575(cfg.MCB_I2C_PORT_NUM, cfg.MCB_I2C_ROW_EF_ADDRESS)
+        self.pcf_row_gh = PCF8575(cfg.MCB_I2C_PORT_NUM, cfg.MCB_I2C_ROW_GH_ADDRESS)
+        self.pcf_leds = PCF8575(cfg.MCB_I2C_PORT_NUM, cfg.MCB_I2C_LEDS_ADDRESS)
         
         # Initialize all fields to False
         default = [False] * 8
@@ -78,22 +55,22 @@ class Board():
         GPIO.setmode(GPIO.BCM)
 
         # Init buttons pin mode
-        GPIO.setup(MCB_BUT_WHITE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_BUT_CONFIRM, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_BUT_BACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_BUT_BLACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_BUT_WHITE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_BUT_CONFIRM, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_BUT_BACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_BUT_BLACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
         # Init fields pin mode
-        GPIO.setup(MCB_ROW_AB_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_ROW_CD_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_ROW_AB_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_ROW_CD_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     def _button_callback(self, channel):
         
         """! Event callback to save events """
 
-        if self.args.debug: print(f"{debug_msg}event: {channel}")
+        if self.args.debug: print(f"{self.cfg.debug_msg}event: {channel}")
 
     def event_detected(self, channel):
 
@@ -122,19 +99,19 @@ class Board():
         #GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
 
         # Checker
-        GPIO.add_event_detect(MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
 
     def remove_button_events(self):
 
         """! Remove events from all buttons """
 
-        GPIO.remove_event_detect(MCB_BUT_WHITE)
-        GPIO.remove_event_detect(MCB_BUT_CONFIRM)
-        GPIO.remove_event_detect(MCB_BUT_BACK)
-        GPIO.remove_event_detect(MCB_BUT_BLACK)
+        GPIO.remove_event_detect(self.cfg.MCB_BUT_WHITE)
+        GPIO.remove_event_detect(self.cfg.MCB_BUT_CONFIRM)
+        GPIO.remove_event_detect(self.cfg.MCB_BUT_BACK)
+        GPIO.remove_event_detect(self.cfg.MCB_BUT_BLACK)
 
 
     def add_field_events(self):
@@ -145,20 +122,20 @@ class Board():
         self.remove_field_events()
 
         # Add field events
-        GPIO.add_event_detect(MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(self.cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
 
 
     def remove_field_events(self):
 
         """! Remove events from all chess fields """
 
-        GPIO.remove_event_detect(MCB_ROW_AB_IO)
-        GPIO.remove_event_detect(MCB_ROW_CD_IO)
-        GPIO.remove_event_detect(MCB_ROW_EF_IO)
-        GPIO.remove_event_detect(MCB_ROW_GH_IO)
+        GPIO.remove_event_detect(self.cfg.MCB_ROW_AB_IO)
+        GPIO.remove_event_detect(self.cfg.MCB_ROW_CD_IO)
+        GPIO.remove_event_detect(self.cfg.MCB_ROW_EF_IO)
+        GPIO.remove_event_detect(self.cfg.MCB_ROW_GH_IO)
 
 
     def startup_leds(self, delay):
@@ -240,7 +217,7 @@ class Board():
                 if self.board_current[letter][digit] != self.board_prev[letter][digit]:
                     # Safe the last analysed changed field
                     field_value = chr(letter + 97) + chr(digit + 49)
-                    if self.args.debug: print(f"{debug_msg}field changed: {field_value} -> [{self.board_current[letter][digit]}]")
+                    if self.args.debug: print(f"{self.cfg.debug_msg}field changed: {field_value} -> [{self.board_current[letter][digit]}]")
 
         if field_value != "":
             self.board_prev = self.board_current
@@ -360,11 +337,11 @@ class Board():
 
         if self.args.debug: 
             for i in range(8):
-                print(f"{debug_msg}current_undo          : {current_undo[i]}")
-                print(f"{debug_msg}self.board_current    : {self.board_current[i]}")
+                print(f"{self.cfg.debug_msg}current_undo          : {current_undo[i]}")
+                print(f"{self.cfg.debug_msg}self.board_current    : {self.board_current[i]}")
                 #print(f"{debug_msg}self.board_prev       : {self.board_prev[i]}")
                 #print(f"{debug_msg}self.board_history[-1]: {self.board_history[-1][i]}")
-                print(debug_msg)
+                print(self.cfg.debug_msg)
 
         return False
                 

@@ -46,6 +46,7 @@ class Stockfish:
             self._read_line().split(" ")[1].split(".")[0]
         )
         """
+        self._stockfish_major_version = 12
 
         self._put("uci")
 
