@@ -4,22 +4,20 @@
     :author: Mick Kirkegaard.
 """
 
-from config import Config
 from pcf8575 import PCF8575  # https://pypi.org/project/pcf8575/
 import RPi.GPIO as GPIO
-from config import *
+import config as cfg
 import time
 
 
 class Board():
 
-    def __init__(self, args: list(), cfg: Config):
+    def __init__(self, args: []):
 
         """
         Init. board fields and led drivers
         """
 
-        self.cfg = cfg
         self.args = args
 
         self.pcf_row_ab = PCF8575(cfg.MCB_I2C_PORT_NUM, cfg.MCB_I2C_ROW_AB_ADDRESS)
@@ -70,7 +68,7 @@ class Board():
         
         """! Event callback to save events """
 
-        if self.args.debug: print(f"{self.cfg.debug_msg}event: {channel}")
+        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}event: {channel}")
 
     def event_detected(self, channel):
 
@@ -89,29 +87,24 @@ class Board():
         # Remove the events before adding them again
         self.remove_button_events()
 
-        # Small delay
-        #time.sleep(0.5)
+        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add button events")
 
         # Add button events
-        #GPIO.add_event_detect(MCB_BUT_WHITE, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
-        #GPIO.add_event_detect(MCB_BUT_CONFIRM, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
-        #GPIO.add_event_detect(MCB_BUT_BACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
-        #GPIO.add_event_detect(MCB_BUT_BLACK, GPIO.FALLING, bouncetime=MCB_BUT_DEBOUNCE)
-
-        # Checker
-        GPIO.add_event_detect(self.cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(self.cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(self.cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(self.cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=self.cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
 
     def remove_button_events(self):
 
         """! Remove events from all buttons """
 
-        GPIO.remove_event_detect(self.cfg.MCB_BUT_WHITE)
-        GPIO.remove_event_detect(self.cfg.MCB_BUT_CONFIRM)
-        GPIO.remove_event_detect(self.cfg.MCB_BUT_BACK)
-        GPIO.remove_event_detect(self.cfg.MCB_BUT_BLACK)
+        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}remove button events")
+
+        GPIO.remove_event_detect(cfg.MCB_BUT_WHITE)
+        GPIO.remove_event_detect(cfg.MCB_BUT_CONFIRM)
+        GPIO.remove_event_detect(cfg.MCB_BUT_BACK)
+        GPIO.remove_event_detect(cfg.MCB_BUT_BLACK)
 
 
     def add_field_events(self):
@@ -121,21 +114,25 @@ class Board():
         # Remove the events before adding them again
         self.remove_field_events()
 
+        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add field events")
+
         # Add field events
-        GPIO.add_event_detect(self.cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(self.cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(self.cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(self.cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=self.cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
 
 
     def remove_field_events(self):
 
         """! Remove events from all chess fields """
 
-        GPIO.remove_event_detect(self.cfg.MCB_ROW_AB_IO)
-        GPIO.remove_event_detect(self.cfg.MCB_ROW_CD_IO)
-        GPIO.remove_event_detect(self.cfg.MCB_ROW_EF_IO)
-        GPIO.remove_event_detect(self.cfg.MCB_ROW_GH_IO)
+        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}remove field events")
+
+        GPIO.remove_event_detect(cfg.MCB_ROW_AB_IO)
+        GPIO.remove_event_detect(cfg.MCB_ROW_CD_IO)
+        GPIO.remove_event_detect(cfg.MCB_ROW_EF_IO)
+        GPIO.remove_event_detect(cfg.MCB_ROW_GH_IO)
 
 
     def startup_leds(self, delay):
@@ -217,7 +214,7 @@ class Board():
                 if self.board_current[letter][digit] != self.board_prev[letter][digit]:
                     # Safe the last analysed changed field
                     field_value = chr(letter + 97) + chr(digit + 49)
-                    if self.args.debug: print(f"{self.cfg.debug_msg}field changed: {field_value} -> [{self.board_current[letter][digit]}]")
+                    if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}field changed: {field_value} -> [{self.board_current[letter][digit]}]")
 
         if field_value != "":
             self.board_prev = self.board_current
@@ -325,7 +322,7 @@ class Board():
 
         # Check if current board match board we are going to.
         if (self.board_current == current_undo):
-                       
+                    
             # Update undo history
             del self.board_history[-1]
 
@@ -337,11 +334,11 @@ class Board():
 
         if self.args.debug: 
             for i in range(8):
-                print(f"{self.cfg.debug_msg}current_undo          : {current_undo[i]}")
-                print(f"{self.cfg.debug_msg}self.board_current    : {self.board_current[i]}")
-                #print(f"{debug_msg}self.board_prev       : {self.board_prev[i]}")
-                #print(f"{debug_msg}self.board_history[-1]: {self.board_history[-1][i]}")
-                print(self.cfg.debug_msg)
+                print(f"{cfg.MCB_DEBUG_MSG}current_undo          : {current_undo[i]}")
+                print(f"{cfg.MCB_DEBUG_MSG}self.board_current    : {self.board_current[i]}")
+                #print(f"{MCB_DEBUG_MSG}self.board_prev       : {self.board_prev[i]}")
+                #print(f"{MCB_DEBUG_MSG}self.board_history[-1]: {self.board_history[-1][i]}")
+                print(cfg.MCB_DEBUG_MSG)
 
         return False
                 
@@ -365,31 +362,31 @@ class Board():
                 # Check for all 4 castling combinations and confirm the move by returning True
                 if (move[2] + move[3]) == "g1":
                     if self.board_current[ord("e") - 97][ord("1") - 49] and \
-                       not self.board_current[ord("f") - 97][ord("1") - 49] and \
-                       not self.board_current[ord("g") - 97][ord("1") - 49] and \
-                       self.board_current[ord("h") - 97][ord("1") - 49]:
+                    not self.board_current[ord("f") - 97][ord("1") - 49] and \
+                    not self.board_current[ord("g") - 97][ord("1") - 49] and \
+                    self.board_current[ord("h") - 97][ord("1") - 49]:
                         return True
                 elif (move[2] + move[3]) == "c1":
                     if self.board_current[ord("e") - 97][ord("1") - 49] and \
-                       not self.board_current[ord("d") - 97][ord("1") - 49] and \
-                       not self.board_current[ord("c") - 97][ord("1") - 49] and \
-                       self.board_current[ord("a") - 97][ord("1") - 49]:
+                    not self.board_current[ord("d") - 97][ord("1") - 49] and \
+                    not self.board_current[ord("c") - 97][ord("1") - 49] and \
+                    self.board_current[ord("a") - 97][ord("1") - 49]:
                         return True
                 elif (move[2] + move[3]) == "g8":
                     if self.board_current[ord("e") - 97][ord("8") - 49] and \
-                       not self.board_current[ord("f") - 97][ord("8") - 49] and \
-                       not self.board_current[ord("g") - 97][ord("8") - 49] and \
-                       self.board_current[ord("h") - 97][ord("8") - 49]:
+                    not self.board_current[ord("f") - 97][ord("8") - 49] and \
+                    not self.board_current[ord("g") - 97][ord("8") - 49] and \
+                    self.board_current[ord("h") - 97][ord("8") - 49]:
                         return True
                 elif (move[2] + move[3]) == "c8":
                     if self.board_current[ord("e") - 97][ord("8") - 49] and \
-                       not self.board_current[ord("d") - 97][ord("8") - 49] and \
-                       not self.board_current[ord("c") - 97][ord("8") - 49] and \
-                       self.board_current[ord("a") - 97][ord("8") - 49]:
+                    not self.board_current[ord("d") - 97][ord("8") - 49] and \
+                    not self.board_current[ord("c") - 97][ord("8") - 49] and \
+                    self.board_current[ord("a") - 97][ord("8") - 49]:
                         return True
             else:
                 if self.board_current[ord(move[0]) - 97][ord(move[1]) - 49] == True and \
-                   self.board_current[ord(move[2]) - 97][ord(move[3]) - 49] == False:
+                self.board_current[ord(move[2]) - 97][ord(move[3]) - 49] == False:
                     return True
 
         return False
