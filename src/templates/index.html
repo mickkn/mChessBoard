@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.min.css')}}"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/fontawesome.css')}}"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css')}}"/>
-	<link rel="stylesheet" href="{{ url_for('static', filename='css/w3.css') }}">
+	  <link rel="stylesheet" href="{{ url_for('static', filename='css/w3.css') }}">
   </head>
   <body class="bg-dark">
   
@@ -81,11 +81,13 @@
       </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/jquery.min.js')}}"></script>
-    <script src="{{ url_for('static', filename='js/chessboard-0.3.0.min.js')}}"></script>
-    <script src="{{ url_for('static', filename='js/bootstrap.min.js')}}"></script>
+    <div id="log"></div>
 
+    <script src="{{ url_for('static', filename='js/jquery.min.js')}}"></script>
+    <script src="{{ url_for('static', filename='js/chessboard-1.0.0.min.js')}}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap.min.js')}}"></script>
     <script src="{{ url_for('static', filename='js/app.js')}}"></script>
+    <script src="{{ url_for('static', filename='js/socket.io.js')}}"></script> <!-- https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js -->
     <script>
       var cfg = {
         position: '{{ fen }}',
@@ -95,7 +97,22 @@
         onDrop: onDrop
       };
       var board = ChessBoard('board', cfg);
-	  $(window).resize(board.resize)
+      $(window).resize(board.resize)
+
+      var socket = io();
+
+      socket.on('connect', function() {
+        socket.emit('my_event', {data: 'I\'m connected!'});
+      });
+
+	  
+
+      socket.on('my_response', function(msg, cb) {
+        $('#log').append('<br>' + $('<div/>').text('Received #' + msg.count + ': ' + msg.data).html());
+        if (cb)
+          cb();
+      });
+
     </script>
   </body>
 </html>

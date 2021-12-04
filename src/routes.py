@@ -1,7 +1,7 @@
 from flask import Flask, Response, request, render_template, url_for
-import chess, chess.pgn
-import chess.engine
-import traceback
+#import chess, chess.pgn
+#import chess.engine
+#import traceback
 import time
 import collections
 import json

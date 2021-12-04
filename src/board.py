@@ -64,6 +64,9 @@ class Board():
         GPIO.setup(cfg.MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(cfg.MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
+        self.field_events_active = False
+        self.button_events_active = False
+
     def _button_callback(self, channel):
         
         """! Event callback to save events """
@@ -83,56 +86,55 @@ class Board():
     def add_button_events(self):
 
         """! Add events to all buttons """
-        
-        # Remove the events before adding them again
-        self.remove_button_events()
-
-        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add button events")
 
         # Add button events
-        GPIO.add_event_detect(cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+        if not self.button_events_active:
+            if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add button events")
+            GPIO.add_event_detect(cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+            GPIO.add_event_detect(cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+            GPIO.add_event_detect(cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+            GPIO.add_event_detect(cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+            self.button_events_active = True
 
     def remove_button_events(self):
 
         """! Remove events from all buttons """
 
-        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}remove button events")
-
-        GPIO.remove_event_detect(cfg.MCB_BUT_WHITE)
-        GPIO.remove_event_detect(cfg.MCB_BUT_CONFIRM)
-        GPIO.remove_event_detect(cfg.MCB_BUT_BACK)
-        GPIO.remove_event_detect(cfg.MCB_BUT_BLACK)
+        if self.button_events_active:
+            if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}remove button events")
+            GPIO.remove_event_detect(cfg.MCB_BUT_WHITE)
+            GPIO.remove_event_detect(cfg.MCB_BUT_CONFIRM)
+            GPIO.remove_event_detect(cfg.MCB_BUT_BACK)
+            GPIO.remove_event_detect(cfg.MCB_BUT_BLACK)
+            self.button_events_active = False
 
 
     def add_field_events(self):
 
         """! Add events to all chess fields """
 
-        # Remove the events before adding them again
-        self.remove_field_events()
-
-        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add field events")
-
         # Add field events
-        GPIO.add_event_detect(cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+        if not self.field_events_active:
+            if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add field events")
+            GPIO.add_event_detect(cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+            GPIO.add_event_detect(cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+            GPIO.add_event_detect(cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+            GPIO.add_event_detect(cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+            self.field_events_active = True
 
 
     def remove_field_events(self):
 
         """! Remove events from all chess fields """
 
-        if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}remove field events")
-
-        GPIO.remove_event_detect(cfg.MCB_ROW_AB_IO)
-        GPIO.remove_event_detect(cfg.MCB_ROW_CD_IO)
-        GPIO.remove_event_detect(cfg.MCB_ROW_EF_IO)
-        GPIO.remove_event_detect(cfg.MCB_ROW_GH_IO)
+        # Remvoe field events
+        if self.field_events_active:
+            if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}remove field events")
+            GPIO.remove_event_detect(cfg.MCB_ROW_AB_IO)
+            GPIO.remove_event_detect(cfg.MCB_ROW_CD_IO)
+            GPIO.remove_event_detect(cfg.MCB_ROW_EF_IO)
+            GPIO.remove_event_detect(cfg.MCB_ROW_GH_IO)
+            self.field_events_active = False
 
 
     def startup_leds(self, delay):

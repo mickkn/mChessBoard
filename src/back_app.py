@@ -293,7 +293,7 @@ def run_game():
         return response
 
 
-    http_server = WSGIServer(('0.0.0.0', 1336), app)
+    http_server = WSGIServer(('0.0.0.0', 1337), app)
     http_server.serve_forever()
 
     #app.run(host='127.0.0.1', debug=True)
