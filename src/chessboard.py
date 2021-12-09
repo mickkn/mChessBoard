@@ -33,14 +33,19 @@ def parser():
     )
 
     args.add_argument(
-        "-p",
-        "--port",
-        type=int,
-        default=80,
-        help="listening port",
+        "-i",
+        "--input",
+        type=str,
+        default="/home/pi/mChessBoard/src/minic_3.04_linux_x32_armv6",
+        help="path to ai engine",
     )
     args.add_argument("-d", "--debug", action="store_true", help="debug printout")
-
+    args.add_argument(
+        "-a",
+        "--auto_confirm",
+        action="store_true",
+        help="auto confirm movement of pieces",
+    )
 
     print("\n" + str(args.parse_args()) + "\n")
 
@@ -52,6 +57,11 @@ def signal_handler(sig, frame):
     """! @brief    Exit function"""
 
     print(" SIGINT or CTRL-C detected. Exiting gracefully")
+    GPIO.cleanup()
+    global chess_board
+    chess_board.set_leds("")
+    global board_thread
+    board_thread.join()
     sys.exit(0)
 
 
@@ -105,6 +115,8 @@ def test_disconnect():
     print('Client disconnected', request.sid)
     
 
+# https://cppsecrets.com/users/12012115105110103104112971141051049711450495264103109971051084699111109/Python-Socketio-Client.php
+
 if __name__ == "__main__":
 
     """! @brief    Main function"""
@@ -115,8 +127,21 @@ if __name__ == "__main__":
     # Parse arguments
     args = parser()
 
+    # Create a FSM object
+    statemachine = BoardFsm(args)
+
+    # Create a Board object
+    global chess_board
+    chess_board = Board(args)
+
+    global board_thread
+    board_thread = threading.Thread(target=run, args=(statemachine, args, chess_board))
+    board_thread.start()
+
+    """
     if args.debug:
-        socketio.run(app=app, host='0.0.0.0', port=args.port, debug=True)
+        socketio.run(app=app, host='0.0.0.0', port=8080, debug=True)
     else:
-        socketio.run(app=app, host='0.0.0.0', port=args.port, debug=False)
+        socketio.run(app=app, host='0.0.0.0', port=8080, debug=False)
+    """
     

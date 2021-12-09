@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/chessboard-1.0.0.min.css')}}"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/fontawesome.css')}}"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css')}}"/>
-	  <link rel="stylesheet" href="{{ url_for('static', filename='css/w3.css') }}">
   </head>
   <body class="bg-dark">
   
@@ -81,7 +80,7 @@
       </div>
     </div>
 
-    <div id="log"></div>
+    <!--<div id="log" style="color:#ffffff;"></div>-->
 
     <script src="{{ url_for('static', filename='js/jquery.min.js')}}"></script>
     <script src="{{ url_for('static', filename='js/chessboard-1.0.0.min.js')}}"></script>
@@ -102,12 +101,22 @@
       var socket = io();
 
       socket.on('connect', function() {
-        socket.emit('my_event', {data: 'I\'m connected!'});
+        socket.emit('my_event', {data: 'Server is connected!'});
       });
 
-	  
+	  socket.on('move', function(msg) {
+
+        console.log(msg.data)
+
+        cfg = {
+          position: msg.data.toString(),
+        };
+        board = ChessBoard('board', cfg);
+
+      });
 
       socket.on('my_response', function(msg, cb) {
+        console.log('Received #' + msg.count + ': ' + msg.data)
         $('#log').append('<br>' + $('<div/>').text('Received #' + msg.count + ': ' + msg.data).html());
         if (cb)
           cb();

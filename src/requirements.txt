@@ -3,5 +3,5 @@ RPi.GPIO==0.7.0
 python-statemachine==0.8.0
 flask==2.0.2
 python-chess==1.999
-gevent==21.8.0
-python-dotenv==0.19.2
+flask-socketio
+python-socketio[client]

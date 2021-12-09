@@ -13,7 +13,7 @@ from stockfish import (
 import time
 import config as cfg
 import RPi.GPIO as GPIO
-from flask_socketio import send, emit
+import socketio
 
 class BoardFsm(StateMachine):
 
@@ -34,8 +34,6 @@ class BoardFsm(StateMachine):
     move_undo = ""  ### Move made by Undo
     move_promotion = ""  ### Move made by Promotion
     moves = []  ### List of moves for engine
-    moves_fen = None
-    moves_fen_prev = None
     play_difficulty = 1  ### Default difficulty
 
     mode_setting = 0  ### Default mode setting 0: Human vs AI, 1: Human vs. Human
@@ -91,16 +89,16 @@ class BoardFsm(StateMachine):
     go_to_undo_move_state = human_move_state.to(undo_move_state) | ai_move_state.to(
         undo_move_state
     )
+    
+    ai_parameters = cfg.DEFAULT_STOCKFISH_PARAMS
 
+    sio = socketio.Client(logger=True, engineio_logger=True)
 
 def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
     while True:
         # Set flag if the state has changed
         _fsm.first_entry = _fsm.initial or (_fsm.curr_state != _fsm.current_state)
-        
-        _fsm.moves_fen_prev = _fsm.moves_fen
-        _fsm.moves_fen = None
 
         if _fsm.first_entry:
             _fsm.prev_state = _fsm.curr_state
@@ -119,6 +117,7 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 _fsm.moves = []  # Reset moves list
                 _board.add_button_events()  # Add button events (delays the setup init)
                 _board.startup_leds(0.05)  # Run the LEDs in a startup sequence
+                _fsm.sio.disconnect()
 
             _fsm.go_to_mode_state()  # Set next state
 
@@ -220,20 +219,20 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 if _fsm.play_difficulty == 0:  # Use level random mover on difficulty 0
                     if _args.debug:
                         print(f"{cfg.MCB_DEBUG_MSG}using Level: {_fsm.play_difficulty}")
-                    cfg.ai_parameters.update({"UCI_LimitStrength": "false"})
-                    cfg.ai_parameters.update({"Level": _fsm.play_difficulty})
+                    _fsm.ai_parameters.update({"UCI_LimitStrength": "false"})
+                    _fsm.ai_parameters.update({"Level": _fsm.play_difficulty})
                 else:  # Use a ELO rating
                     if _args.debug:
                         print(
                             f"{cfg.MCB_DEBUG_MSG}using ELO rating: {_fsm.play_difficulty * 100 + 600}"
                         )
-                    cfg.ai_parameters.update({"UCI_LimitStrength": "true"})
-                    cfg.ai_parameters.update(
+                    _fsm.ai_parameters.update({"UCI_LimitStrength": "true"})
+                    _fsm.ai_parameters.update(
                         {"UCI_Elo": _fsm.play_difficulty * 100 + 600}
                     )  # 700 to 2800 (limit here is 1500, enough for me)
 
                 # Initiate ai engine
-                _fsm.ai = Stockfish(_args.input, parameters=cfg.ai_parameters)
+                _fsm.ai = Stockfish(_args.input, parameters=_fsm.ai_parameters)
                 if _args.debug:
                     print(f"{cfg.MCB_DEBUG_MSG} {_fsm.ai.get_parameters()}")
 
@@ -305,7 +304,11 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 _board.board_history.append(_board.board_current)
                 time.sleep(1)  # Wait a sec
                 _board.set_leds("")  # Turn off the LEDs
-
+                try:
+                    _fsm.sio.connect('http://localhost:8080', wait_timeout=10)
+                    _fsm.sio.emit('move_event', {'data': str(_fsm.stockfish.get_fen_position())})
+                except:
+                    print("Connection failed")
                 _fsm.go_to_human_move_state()  # Change state
 
             elif GPIO.event_detected(cfg.MCB_BUT_BACK):
@@ -401,7 +404,10 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                         _board.set_move_done_leds(_fsm.move_human)  # Set the field LEDs
                         _fsm.moves.append(_fsm.move_human)  # Add the move to the moves list
                         _fsm.stockfish.set_position(_fsm.moves)  # Set position in Stockfish
-                        _fsm.moves_fen = _fsm.stockfish.get_fen_position() # Set the position in fen
+                        try:
+                            _fsm.sio.emit('move_event', {'data': str(_fsm.stockfish.get_fen_position())})
+                        except:
+                            print("Emitting failed")
                         _fsm.ai.set_position(_fsm.moves)  # Set position in AI
                         _fsm.move_human = ""  # Reset human move
                         if _args.debug:
@@ -477,6 +483,10 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                         _board.set_move_done_leds(_fsm.move_ai)
                         _fsm.moves.append(_fsm.move_ai)
                         _fsm.stockfish.set_position(_fsm.moves)
+                        try:
+                            _fsm.sio.emit('move_event', {'data': str(_fsm.stockfish.get_fen_position())})
+                        except:
+                            print("Emitting failed")
                         _fsm.ai.set_position(_fsm.moves)
                         _fsm.move_ai = ""
                         if _args.debug:
@@ -718,6 +728,3 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
         # Not initial anymore
         _fsm.initial = False
-
-        if _fsm.moves_fen != _fsm.moves_fen_prev:
-            return _fsm.moves_fen

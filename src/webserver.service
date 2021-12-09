@@ -1,0 +1,25 @@
+[Unit]
+
+Description=mChessBoard web running as a service
+
+After=multi-user.target
+
+ 
+
+[Service]
+
+Type=idle
+
+ExecStart=/home/pi/mChessBoard/src/venv/bin/python /home/pi/mChessBoard/src/app.py
+
+StandardOutput=/home/pi/mChessBoard/output_web.log
+
+StandardError=/home/pi/mChessBoard/error_web.log
+
+SyslogIdentifier=ChessboardWeb
+
+ 
+
+[Install]
+
+WantedBy=multi-user.target
