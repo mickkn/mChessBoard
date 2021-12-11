@@ -24,12 +24,14 @@ MCB_BUT_CONFIRM = 27  # Middle close to WHITE side
 MCB_BUT_BACK = 23  # Middle close to BLACK side
 MCB_BUT_BLACK = 22  # Closest to BLACK side
 MCB_BUT_DEBOUNCE = 200  # Button debounce
-MCB_FIELD_DEBOUNCE = 50  # Field debounce
+MCB_ALL_BUT = [MCB_BUT_WHITE, MCB_BUT_CONFIRM, MCB_BUT_BACK, MCB_BUT_BLACK]
 
 MCB_ROW_AB_IO = 6
 MCB_ROW_CD_IO = 13
 MCB_ROW_EF_IO = 19
 MCB_ROW_GH_IO = 26
+MCB_ALL_FIELDS = [MCB_ROW_AB_IO, MCB_ROW_CD_IO, MCB_ROW_EF_IO, MCB_ROW_GH_IO]
+MCB_FIELD_DEBOUNCE = 50  # Field debounce
 
 """! @brief     Stockfish default parameters """
 DEFAULT_STOCKFISH_PARAMS = {

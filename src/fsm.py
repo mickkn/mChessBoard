@@ -36,7 +36,7 @@ class BoardFsm(StateMachine):
     moves = []  ### List of moves for engine
     play_difficulty = 1  ### Default difficulty
 
-    mode_setting = 0  ### Default mode setting 0: Human vs AI, 1: Human vs. Human
+    human_vs_ai = True  ### Default mode setting 0: Human vs AI, 1: Human vs. Human
     mode_human_color = "white"  ### Default Human color
     timer = None
 
@@ -63,12 +63,19 @@ class BoardFsm(StateMachine):
         | undo_move_state.to(init_state)
         | mode_state.to(init_state)
     )
-    go_to_mode_state = init_state.to(mode_state)
-    go_to_human_color_state = mode_state.to(human_color_state)
-    go_to_difficulty_state = human_color_state.to(difficulty_state) | mode_state.to(
-        difficulty_state
+    go_to_mode_state = (
+        init_state.to(mode_state)
     )
-    go_to_setup_state = difficulty_state.to(setup_state)
+    go_to_human_color_state = (
+        mode_state.to(human_color_state)
+    )
+    go_to_difficulty_state = (
+        human_color_state.to(difficulty_state) 
+        | mode_state.to(difficulty_state)
+    )
+    go_to_setup_state = (
+        difficulty_state.to(setup_state)
+    )
     go_to_ai_move_state = (
         setup_state.to(ai_move_state)
         | human_move_state.to(ai_move_state)
@@ -80,14 +87,17 @@ class BoardFsm(StateMachine):
         | undo_move_state.to(human_move_state)
         | pawn_promotion_state.to(human_move_state)
     )
-    go_to_checkmate_state = human_move_state.to(checkmate_state) | ai_move_state.to(
-        checkmate_state
+    go_to_checkmate_state = (
+        human_move_state.to(checkmate_state) 
+        | ai_move_state.to(checkmate_state)
     )
-    go_to_pawn_promotion_state = human_move_state.to(
-        pawn_promotion_state
-    ) | ai_move_state.to(pawn_promotion_state)
-    go_to_undo_move_state = human_move_state.to(undo_move_state) | ai_move_state.to(
-        undo_move_state
+    go_to_pawn_promotion_state = (
+        human_move_state.to(pawn_promotion_state) 
+        | ai_move_state.to(pawn_promotion_state)
+    )
+    go_to_undo_move_state = (
+        human_move_state.to(undo_move_state) 
+        | ai_move_state.to(undo_move_state)
     )
     
     ai_parameters = cfg.DEFAULT_STOCKFISH_PARAMS
@@ -115,7 +125,7 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 _fsm.move_ai = ""  # Reset AI move instance
                 _fsm.move_human = ""  # Reset Human move instance
                 _fsm.moves = []  # Reset moves list
-                _board.add_button_events()  # Add button events (delays the setup init)
+                #_board.add_button_events()  # Add button events (delays the setup init)
                 _board.startup_leds(0.05)  # Run the LEDs in a startup sequence
                 _fsm.sio.disconnect()
 
@@ -126,12 +136,9 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
             if _fsm.first_entry:
 
                 print(f"STATE: {_fsm.current_state.identifier}")
-
-                _fsm.mode_setting = 0  # Reset mode
-
                 _board.set_leds("4")  # Set LED indicator
 
-            if _fsm.mode_setting == 1:
+            if _fsm.human_vs_ai:
 
                 if GPIO.event_detected(cfg.MCB_BUT_BLACK) or GPIO.event_detected(
                     cfg.MCB_BUT_WHITE
@@ -139,14 +146,14 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                     if _args.debug:
                         print(f"{cfg.MCB_DEBUG_MSG}human vs ai")
-                    _fsm.mode_setting = 0  # Human vs AI
+                    _fsm.human_vs_ai = True  # Human vs AI
                     _board.set_leds("4")  # Set LED indicator
 
                 elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
 
                     _fsm.go_to_difficulty_state()  # Change state
 
-            elif _fsm.mode_setting == 0:
+            elif not _fsm.human_vs_ai:
 
                 if GPIO.event_detected(cfg.MCB_BUT_BLACK) or GPIO.event_detected(
                     cfg.MCB_BUT_WHITE
@@ -154,7 +161,7 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                     if _args.debug:
                         print(f"{cfg.MCB_DEBUG_MSG}human vs human")
-                    _fsm.mode_setting = 1  # Human vs Human
+                    _fsm.human_vs_ai = False  # Human vs Human
                     _board.set_leds("5")  # Set LED indicator
 
                 elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
@@ -277,8 +284,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
-                _board.add_button_events()  # Add button int. events
-                _board.add_field_events()  # Add field int. events
+                #_board.add_button_events()  # Add button int. events
+                #_board.add_field_events()  # Add field int. events
                 _board.set_setup_leds()  # Turn on initial setup LEDs
 
             # React on field events
@@ -326,8 +333,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
-                _board.add_field_events()  # Re-enable event from the fields
-                _board.add_button_events()  # Re-enable event from the buttons
+                #_board.add_field_events()  # Re-enable event from the fields
+                #_board.add_button_events()  # Re-enable event from the buttons
                 _fsm.human_move_field_ = ""  # Reset human move field
                 _fsm.toggle = True  # Reset toggle flag
                 _fsm.timer = time.time()  # Start timer #TODO
@@ -417,9 +424,17 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                             "value": 0,
                         }:  # Evaluate if there is a checkmate
                             _fsm.go_to_checkmate()  # Change state
-                        _board.board_history.append(
-                            _board.board_current
-                        )  # Add the current _board to the undo history list
+                        
+                        # Add the current _board to the undo history list
+                        _board.board_history.append(_board.board_current)  
+                        # If game mode is human vs AI, automatic move to AI turn
+                        print(_fsm.human_vs_ai)
+                        if _fsm.human_vs_ai:
+                            print(f"{cfg.MCB_DEBUG_MSG}auto - ai move")
+                            _board.set_leds("")  # Turn off LEDs for indication
+                            #_board.remove_field_events()
+                            _fsm.move_ai = _fsm.ai.get_best_move()
+                            _fsm.go_to_ai_move_state()
 
                     # Check for pawn promotion
                     elif _fsm.stockfish.is_move_correct(_fsm.move_human + "q"):
@@ -429,10 +444,11 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                         _board.display()
                         print(f"{cfg.MCB_DEBUG_MSG}move not done")
 
+            # If confirm is pressed, the AI shows best move
             elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
                 print(f"{cfg.MCB_DEBUG_MSG}event - hint/ai move")
                 _board.set_leds("")  # Turn off LEDs for indication
-                _board.remove_field_events()
+                #_board.remove_field_events()
                 _fsm.move_ai = _fsm.ai.get_best_move()
                 _fsm.go_to_ai_move_state()
 
@@ -452,8 +468,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
             if _fsm.first_entry:
                 print(f"STATE: {_fsm.current_state.identifier}")
-                _board.add_field_events()  # Re-enable event from the fields
-                _board.add_button_events()  # Re-enable event from the buttons
+                #_board.add_field_events()  # Re-enable event from the fields
+                #_board.add_button_events()  # Re-enable event from the buttons
                 _fsm.timer = time.time()
                 _fsm.toggle = True
 
@@ -706,8 +722,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 if _args.debug:
                     print(f"{cfg.MCB_DEBUG_MSG}go to init")
-                _board.remove_button_events()
-                _board.remove_field_events()
+                #_board.remove_button_events()
+                #_board.remove_field_events()
                 _fsm.go_to_init_state()
 
         # Reset (all buttons pressed)
@@ -721,8 +737,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
             if _args.debug:
                 print(f"{cfg.MCB_DEBUG_MSG}resetting")
             _board.set_leds("abcdefgh12345678")
-            _board.remove_button_events()
-            _board.remove_field_events()
+            #_board.remove_button_events()
+            #_board.remove_field_events()
             time.sleep(2)
             _fsm.go_to_init_state()
 

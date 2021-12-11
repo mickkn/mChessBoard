@@ -49,23 +49,30 @@ class Board():
         # Set all inputs high on init
         self.pcf_row_ab.port = self.pcf_row_cd.port = self.pcf_row_ef.port = self.pcf_row_gh.port = [True] * 16
 
+        # Cleanup all GPIO before init
+        GPIO.cleanup()
+        
         # Setup GPIO pin mode
         GPIO.setmode(GPIO.BCM)
 
         # Init buttons pin mode
-        GPIO.setup(cfg.MCB_BUT_WHITE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(cfg.MCB_BUT_CONFIRM, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(cfg.MCB_BUT_BACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(cfg.MCB_BUT_BLACK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_ALL_BUT, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
         # Init fields pin mode
-        GPIO.setup(cfg.MCB_ROW_AB_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(cfg.MCB_ROW_CD_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(cfg.MCB_ROW_EF_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(cfg.MCB_ROW_GH_IO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(cfg.MCB_ALL_FIELDS, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
         self.field_events_active = False
         self.button_events_active = False
+
+        GPIO.add_event_detect(cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+
+        GPIO.add_event_detect(cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+        GPIO.add_event_detect(cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
 
     def _button_callback(self, channel):
         
