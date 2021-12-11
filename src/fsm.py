@@ -15,6 +15,7 @@ import config as cfg
 import RPi.GPIO as GPIO
 import socketio
 
+
 class BoardFsm(StateMachine):
 
     """
@@ -63,19 +64,12 @@ class BoardFsm(StateMachine):
         | undo_move_state.to(init_state)
         | mode_state.to(init_state)
     )
-    go_to_mode_state = (
-        init_state.to(mode_state)
+    go_to_mode_state = init_state.to(mode_state)
+    go_to_human_color_state = mode_state.to(human_color_state)
+    go_to_difficulty_state = human_color_state.to(difficulty_state) | mode_state.to(
+        difficulty_state
     )
-    go_to_human_color_state = (
-        mode_state.to(human_color_state)
-    )
-    go_to_difficulty_state = (
-        human_color_state.to(difficulty_state) 
-        | mode_state.to(difficulty_state)
-    )
-    go_to_setup_state = (
-        difficulty_state.to(setup_state)
-    )
+    go_to_setup_state = difficulty_state.to(setup_state)
     go_to_ai_move_state = (
         setup_state.to(ai_move_state)
         | human_move_state.to(ai_move_state)
@@ -87,56 +81,95 @@ class BoardFsm(StateMachine):
         | undo_move_state.to(human_move_state)
         | pawn_promotion_state.to(human_move_state)
     )
-    go_to_checkmate_state = (
-        human_move_state.to(checkmate_state) 
-        | ai_move_state.to(checkmate_state)
+    go_to_checkmate_state = human_move_state.to(checkmate_state) | ai_move_state.to(
+        checkmate_state
     )
-    go_to_pawn_promotion_state = (
-        human_move_state.to(pawn_promotion_state) 
-        | ai_move_state.to(pawn_promotion_state)
+    go_to_pawn_promotion_state = human_move_state.to(
+        pawn_promotion_state
+    ) | ai_move_state.to(pawn_promotion_state)
+    go_to_undo_move_state = human_move_state.to(undo_move_state) | ai_move_state.to(
+        undo_move_state
     )
-    go_to_undo_move_state = (
-        human_move_state.to(undo_move_state) 
-        | ai_move_state.to(undo_move_state)
-    )
-    
+
     ai_parameters = cfg.DEFAULT_STOCKFISH_PARAMS
 
+    engine = None
+    engine_eval = None  # Needed because Minic can't evaluate
     sio = socketio.Client(logger=True, engineio_logger=True)
+
+
+def debug_msg(enabled: bool, msg: str) -> None:
+
+    """Debug message handler
+
+        Function to make the FSM less messy
+
+    Args
+        enabled: Print if true
+        msg: Message to display
+    """
+
+    if enabled:
+        print(f"    debug: {msg}")
+
 
 def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
     while True:
-        # Set flag if the state has changed
+
+        # Set first entry flag if the state has changed
         _fsm.first_entry = _fsm.initial or (_fsm.curr_state != _fsm.current_state)
 
+        # Set prev state to current state and local
+        # current state to real current state
         if _fsm.first_entry:
             _fsm.prev_state = _fsm.curr_state
             _fsm.curr_state = _fsm.current_state
 
         if _fsm.is_init_state:
 
-            """! @brief Init the chess board"""
+            """INIT STATE
+            Initialise engines and reset varibles
+            """
 
             if _fsm.first_entry:
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
-                _fsm.move_ai = ""  # Reset AI move instance
-                _fsm.move_human = ""  # Reset Human move instance
-                _fsm.moves = []  # Reset moves list
-                #_board.add_button_events()  # Add button events (delays the setup init)
-                _board.startup_leds(0.05)  # Run the LEDs in a startup sequence
+                # Init. AI and EVAL engine
+                debug_msg(_args.debug, "setting up engines")
+                _fsm.engine = Stockfish(_args.input)
+                _fsm.engine_eval = Stockfish(
+                    "/home/pi/mChessBoard/src/stockfish-12_linux_x32_armv6"
+                )
+                # Reset AI move instance
+                _fsm.move_ai = ""
+                # Reset Human move instance
+                _fsm.move_human = ""
+                # Reset moves list
+                _fsm.moves = []
+                # Run the LEDs in a startup sequence
+                _board.startup_leds(0.05)
+                # Disconnect possible sockets, so it can connect later
                 _fsm.sio.disconnect()
 
-            _fsm.go_to_mode_state()  # Set next state
+            # Set next state, to mode selection
+            _fsm.go_to_mode_state()
 
         elif _fsm.is_mode_state:
 
             if _fsm.first_entry:
 
+                """MODE STATE
+                Let the user chose either
+                AI vs Human or
+                Human vs Human
+                """
+
                 print(f"STATE: {_fsm.current_state.identifier}")
-                _board.set_leds("4")  # Set LED indicator
+
+                #: Set LED indicator
+                _board.set_leds("4")
 
             if _fsm.human_vs_ai:
 
@@ -144,14 +177,16 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                     cfg.MCB_BUT_WHITE
                 ):
 
-                    if _args.debug:
-                        print(f"{cfg.MCB_DEBUG_MSG}human vs ai")
-                    _fsm.human_vs_ai = True  # Human vs AI
-                    _board.set_leds("4")  # Set LED indicator
+                    debug_msg(_args.debug, "human vs ai")
+                    # Human vs AI
+                    _fsm.human_vs_ai = True
+                    # Set LED indicator
+                    _board.set_leds("4")
 
                 elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
 
-                    _fsm.go_to_difficulty_state()  # Change state
+                    # Change state
+                    _fsm.go_to_difficulty_state()
 
             elif not _fsm.human_vs_ai:
 
@@ -159,22 +194,31 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                     cfg.MCB_BUT_WHITE
                 ):
 
-                    if _args.debug:
-                        print(f"{cfg.MCB_DEBUG_MSG}human vs human")
-                    _fsm.human_vs_ai = False  # Human vs Human
-                    _board.set_leds("5")  # Set LED indicator
+                    debug_msg(_args.debug, "human vs human")
+                    # Human vs Human
+                    _fsm.human_vs_ai = False
+                    # Set LED indicator
+                    _board.set_leds("5")
 
                 elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
 
-                    _fsm.go_to_human_color_state()  # Change state
+                    # Change state
+                    _fsm.go_to_human_color_state()
 
         elif _fsm.is_human_color_state:
+
+            """HUMAN COLOR STATE
+            Pick side on AI vs Human
+            """
 
             if _fsm.first_entry:
 
                 print(f"STATE: {_fsm.current_state.identifier}")
-                _fsm.mode_human_color = "white"  # Reset color
-                _board.set_leds("1234")  # Set LED indicator to white
+
+                # Reset color
+                _fsm.mode_human_color = "white"
+                # Set LED indicator to white
+                _board.set_leds("1234")
 
             if _fsm.mode_human_color == "white":
 
@@ -222,34 +266,36 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                     print(f"{cfg.MCB_DEBUG_MSG}confirm ({_fsm.play_difficulty})")
 
                 _board.set_leds("12345678abcdefgh")  # Turn on all LEDs
+                time.sleep(1)  # Wait a sec
 
                 if _fsm.play_difficulty == 0:  # Use level random mover on difficulty 0
                     if _args.debug:
                         print(f"{cfg.MCB_DEBUG_MSG}using Level: {_fsm.play_difficulty}")
-                    _fsm.ai_parameters.update({"UCI_LimitStrength": "false"})
-                    _fsm.ai_parameters.update({"Level": _fsm.play_difficulty})
+                    # _fsm.ai_parameters.update({"UCI_LimitStrength": "false"})
+                    # _fsm.ai_parameters.update({"Level": _fsm.play_difficulty})
+                    _fsm.engine.set_skill_level(0)
                 else:  # Use a ELO rating
                     if _args.debug:
                         print(
                             f"{cfg.MCB_DEBUG_MSG}using ELO rating: {_fsm.play_difficulty * 100 + 600}"
                         )
-                    _fsm.ai_parameters.update({"UCI_LimitStrength": "true"})
-                    _fsm.ai_parameters.update(
-                        {"UCI_Elo": _fsm.play_difficulty * 100 + 600}
-                    )  # 700 to 2800 (limit here is 1500, enough for me)
+                    # _fsm.ai_parameters.update({"UCI_LimitStrength": "true"})
+                    # _fsm.ai_parameters.update(
+                    #    {"UCI_Elo": _fsm.play_difficulty * 100 + 600}
+                    # )
+                    # 700 to 2800 (limit here is 1500, enough for me)
+                    _fsm.engine.set_elo_rating(_fsm.play_difficulty * 100 + 600)
 
-                # Initiate ai engine
-                _fsm.ai = Stockfish(_args.input, parameters=_fsm.ai_parameters)
                 if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG} {_fsm.ai.get_parameters()}")
+                    print(f"{cfg.MCB_DEBUG_MSG} {_fsm.engine.get_parameters()}")
 
                 # Init. eval engine
-                _fsm.stockfish = Stockfish(
-                "/home/pi/mChessBoard/src/stockfish-12_linux_x32_armv6",
-                parameters=cfg.DEFAULT_STOCKFISH_PARAMS,
-                )
-                if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG} {_fsm.stockfish.get_parameters()}")
+                # _fsm.stockfish = Stockfish(
+                # "/home/pi/mChessBoard/src/stockfish-12_linux_x32_armv6",
+                # parameters=cfg.DEFAULT_STOCKFISH_PARAMS,
+                # )
+                # if _args.debug:
+                #    print(f"{cfg.MCB_DEBUG_MSG} {_fsm.stockfish.get_parameters()}")
 
                 _board.set_leds("")
 
@@ -284,8 +330,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
-                #_board.add_button_events()  # Add button int. events
-                #_board.add_field_events()  # Add field int. events
+                # _board.add_button_events()  # Add button int. events
+                # _board.add_field_events()  # Add field int. events
                 _board.set_setup_leds()  # Turn on initial setup LEDs
 
             # React on field events
@@ -312,8 +358,10 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 time.sleep(1)  # Wait a sec
                 _board.set_leds("")  # Turn off the LEDs
                 try:
-                    _fsm.sio.connect('http://localhost:8080', wait_timeout=10)
-                    _fsm.sio.emit('move_event', {'data': str(_fsm.stockfish.get_fen_position())})
+                    _fsm.sio.connect("http://localhost", wait_timeout=10)
+                    _fsm.sio.emit(
+                        "move_event", {"data": str(_fsm.engine_eval.get_fen_position())}
+                    )
                 except:
                     print("Connection failed")
                 _fsm.go_to_human_move_state()  # Change state
@@ -333,8 +381,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
-                #_board.add_field_events()  # Re-enable event from the fields
-                #_board.add_button_events()  # Re-enable event from the buttons
+                # _board.add_field_events()  # Re-enable event from the fields
+                # _board.add_button_events()  # Re-enable event from the buttons
                 _fsm.human_move_field_ = ""  # Reset human move field
                 _fsm.toggle = True  # Reset toggle flag
                 _fsm.timer = time.time()  # Start timer #TODO
@@ -345,7 +393,9 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 _fsm.toggle = not _fsm.toggle  # Toggle, toggle flag
                 _fsm.timer = time.time()  # Take a new timestamp
-                _board.set_move_led(_fsm.toggle, _fsm.move_human)  # Toggle the move LEDs
+                _board.set_move_led(
+                    _fsm.toggle, _fsm.move_human
+                )  # Toggle the move LEDs
 
             # Handle events on fields.
             if (
@@ -355,11 +405,12 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 or GPIO.event_detected(cfg.MCB_ROW_GH_IO)
             ):
 
-                human_move_field = (
-                    _board.get_field_event()
-                )  # Get the specific field event (single field change)
+                # Get the specific field event (single field change)
+                human_move_field = _board.get_field_event()
                 if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG}event - field changed: {human_move_field}")
+                    print(
+                        f"{cfg.MCB_DEBUG_MSG}event - field changed: {human_move_field}"
+                    )
 
                 # If first event and not an empty event
                 if len(_fsm.move_human) == 0 and human_move_field != "":
@@ -372,23 +423,23 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                     and human_move_field != _fsm.move_human
                 ):
 
-                    move_human_opposite = (
-                        human_move_field + _fsm.move_human
-                    )  # Save an opposite representation
-                    _fsm.move_human += (
-                        human_move_field  # Add the new field to the human move
-                    )
+                    # Save an opposite representation
+                    move_human_opposite = human_move_field + _fsm.move_human
+                    # Add the new field to the human move
+                    _fsm.move_human += human_move_field
+
+                    print(_fsm.engine_eval.is_move_correct(move_human_opposite))
 
                     # Check for incorrectness (also check for pawn promotion)
-                    if not _fsm.stockfish.is_move_correct(
+                    if not _fsm.engine_eval.is_move_correct(
                         _fsm.move_human
-                    ) and not _fsm.stockfish.is_move_correct(_fsm.move_human + "q"):
+                    ) and not _fsm.engine_eval.is_move_correct(_fsm.move_human + "q"):
                         _fsm.move_human = ""
                         _board.set_leds("")
                     # Check for correctness opposite if fields are obtained in opposite direction (could be pawn promotion)
-                    elif _fsm.stockfish.is_move_correct(
+                    elif _fsm.engine_eval.is_move_correct(
                         move_human_opposite
-                    ) or _fsm.stockfish.is_move_correct(move_human_opposite + "q"):
+                    ) or _fsm.engine_eval.is_move_correct(move_human_opposite + "q"):
                         _fsm.move_human = move_human_opposite
 
                 if _args.debug:
@@ -402,43 +453,52 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
             ) and len(_fsm.move_human) == 4:
 
                 if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG}event - confirm human move: {_fsm.move_human}")
+                    print(
+                        f"{cfg.MCB_DEBUG_MSG}event - confirm human move: {_fsm.move_human}"
+                    )
                 _board.read_fields()  # Read and update fields
                 if _board.is_move_done(_fsm.move_human, _fsm.moves):
-                    if _fsm.stockfish.is_move_correct(_fsm.move_human):
+                    if _fsm.engine_eval.is_move_correct(_fsm.move_human):
                         if _args.debug:
                             print(f"{cfg.MCB_DEBUG_MSG}stockfish - move correct")
                         _board.set_move_done_leds(_fsm.move_human)  # Set the field LEDs
-                        _fsm.moves.append(_fsm.move_human)  # Add the move to the moves list
-                        _fsm.stockfish.set_position(_fsm.moves)  # Set position in Stockfish
+                        _fsm.moves.append(
+                            _fsm.move_human
+                        )  # Add the move to the moves list
+                        _fsm.engine.set_position(_fsm.moves)  # Set position in AI
                         try:
-                            _fsm.sio.emit('move_event', {'data': str(_fsm.stockfish.get_fen_position())})
+                            _fsm.sio.emit(
+                                "move_event",
+                                {"data": str(_fsm.engine_eval.get_fen_position())},
+                            )
                         except:
                             print("Emitting failed")
-                        _fsm.ai.set_position(_fsm.moves)  # Set position in AI
+                        _fsm.engine_eval.set_position(
+                            _fsm.moves
+                        )  # Set position in Eval
                         _fsm.move_human = ""  # Reset human move
                         if _args.debug:
-                            _board.full_display(_fsm.stockfish.get_board_visual())
-                        if _fsm.stockfish.get_evaluation() == {
+                            _board.full_display(_fsm.engine_eval.get_board_visual())
+                        if _fsm.engine_eval.get_evaluation() == {
                             "type": "mate",
                             "value": 0,
                         }:  # Evaluate if there is a checkmate
-                            _fsm.go_to_checkmate()  # Change state
-                        
+                            _fsm.go_to_checkmate_state()  # Change state
+
                         # Add the current _board to the undo history list
-                        _board.board_history.append(_board.board_current)  
+                        _board.board_history.append(_board.board_current)
                         # If game mode is human vs AI, automatic move to AI turn
                         print(_fsm.human_vs_ai)
                         if _fsm.human_vs_ai:
                             print(f"{cfg.MCB_DEBUG_MSG}auto - ai move")
                             _board.set_leds("")  # Turn off LEDs for indication
-                            #_board.remove_field_events()
-                            _fsm.move_ai = _fsm.ai.get_best_move()
+                            # _board.remove_field_events()
+                            _fsm.move_ai = _fsm.engine.get_best_move()
                             _fsm.go_to_ai_move_state()
 
                     # Check for pawn promotion
-                    elif _fsm.stockfish.is_move_correct(_fsm.move_human + "q"):
-                        _fsm.go_to_pawn_promotion()
+                    elif _fsm.engine_eval.is_move_correct(_fsm.move_human + "q"):
+                        _fsm.go_to_pawn_promotion_state()
                 else:
                     if _args.debug:
                         _board.display()
@@ -448,15 +508,15 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
             elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
                 print(f"{cfg.MCB_DEBUG_MSG}event - hint/ai move")
                 _board.set_leds("")  # Turn off LEDs for indication
-                #_board.remove_field_events()
-                _fsm.move_ai = _fsm.ai.get_best_move()
+                # _board.remove_field_events()
+                _fsm.move_ai = _fsm.engine.get_best_move()
                 _fsm.go_to_ai_move_state()
 
             elif GPIO.event_detected(cfg.MCB_BUT_BACK):
                 if _args.debug:
                     print(f"{cfg.MCB_DEBUG_MSG}event - undo")
                 if _args.debug:
-                    _board.full_display(_fsm.stockfish.get_board_visual())
+                    _board.full_display(_fsm.engine_eval.get_board_visual())
                 _fsm.go_to_undo_move_state()
 
         elif _fsm.is_ai_move_state:
@@ -468,8 +528,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
             if _fsm.first_entry:
                 print(f"STATE: {_fsm.current_state.identifier}")
-                #_board.add_field_events()  # Re-enable event from the fields
-                #_board.add_button_events()  # Re-enable event from the buttons
+                # _board.add_field_events()  # Re-enable event from the fields
+                # _board.add_button_events()  # Re-enable event from the buttons
                 _fsm.timer = time.time()
                 _fsm.toggle = True
 
@@ -486,7 +546,9 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
             if (
                 GPIO.event_detected(cfg.MCB_BUT_BLACK)
                 or GPIO.event_detected(cfg.MCB_BUT_WHITE)
-                or (_args.auto_confirm and _board.is_move_done(_fsm.move_ai, _fsm.moves))
+                or (
+                    _args.auto_confirm and _board.is_move_done(_fsm.move_ai, _fsm.moves)
+                )
             ):
 
                 if _args.debug:
@@ -495,20 +557,26 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                     _fsm.go_to_pawn_promotion_state()
                 elif _board.is_move_done(_fsm.move_ai, _fsm.moves):
                     _board.board_prev = _board.board_current
-                    if _fsm.stockfish.is_move_correct(_fsm.move_ai):
+                    if _fsm.engine_eval.is_move_correct(_fsm.move_ai):
                         _board.set_move_done_leds(_fsm.move_ai)
                         _fsm.moves.append(_fsm.move_ai)
-                        _fsm.stockfish.set_position(_fsm.moves)
+                        _fsm.engine.set_position(_fsm.moves)
+                        _fsm.engine_eval.set_position(_fsm.moves)
                         try:
-                            _fsm.sio.emit('move_event', {'data': str(_fsm.stockfish.get_fen_position())})
+                            _fsm.sio.emit(
+                                "move_event",
+                                {"data": str(_fsm.engine_eval.get_fen_position())},
+                            )
                         except:
                             print("Emitting failed")
-                        _fsm.ai.set_position(_fsm.moves)
                         _fsm.move_ai = ""
                         if _args.debug:
-                            _board.full_display(_fsm.stockfish.get_board_visual())
-                        if _fsm.stockfish.get_evaluation() == {"type": "mate", "value": 0}:
-                            _fsm.go_to_checkmate()
+                            _board.full_display(_fsm.engine_eval.get_board_visual())
+                        if _fsm.engine_eval.get_evaluation() == {
+                            "type": "mate",
+                            "value": 0,
+                        }:
+                            _fsm.go_to_checkmate_state()
                         else:
                             _fsm.go_to_human_move_state()
                         _board.board_history.append(_board.board_current)
@@ -520,7 +588,7 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 if _args.debug:
                     print(f"{cfg.MCB_DEBUG_MSG}event - undo")
                 if _args.debug:
-                    _board.full_display(_fsm.stockfish.get_board_visual())
+                    _board.full_display(_fsm.engine_eval.get_board_visual())
                 _fsm.go_to_undo_move_state()
 
         elif _fsm.is_pawn_promotion_state:
@@ -534,7 +602,9 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 print(f"STATE: {_fsm.current_state.identifier}")
                 if _fsm.prev_state.value == "human_move_state":
                     if _args.debug:
-                        print(f"{cfg.MCB_DEBUG_MSG}from human move state: {_fsm.move_human}")
+                        print(
+                            f"{cfg.MCB_DEBUG_MSG}from human move state: {_fsm.move_human}"
+                        )
                     _fsm.move_promotion = _fsm.move_human
                     move_human_flag = True
                     promotion_loop = 0
@@ -583,7 +653,7 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 _board.read_fields()  # Read and update fields
                 if _board.is_move_done(_fsm.move_promotion[:4], _fsm.moves):
-                    if _fsm.stockfish.is_move_correct(_fsm.move_promotion):
+                    if _fsm.engine_eval.is_move_correct(_fsm.move_promotion):
                         if _args.debug:
                             print(f"{cfg.MCB_DEBUG_MSG}stockfish - move correct")
                         _board.set_move_done_leds(
@@ -592,17 +662,19 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                         _fsm.moves.append(
                             _fsm.move_promotion
                         )  # Add the move to the moves list
-                        _fsm.stockfish.set_position(_fsm.moves)  # Set position in Stockfish
-                        _fsm.ai.set_position(_fsm.moves)  # Set position in AI
+                        _fsm.engine.set_position(_fsm.moves)  # Set position in AI
+                        _fsm.engine_eval.set_position(
+                            _fsm.moves
+                        )  # Set position in Eval
                         _fsm.move_human = ""  # Reset human move
                         _fsm.move_ai = ""  # Reset ai move
                         if _args.debug:
-                            _board.full_display(_fsm.stockfish.get_board_visual())
-                        if _fsm.stockfish.get_evaluation() == {
+                            _board.full_display(_fsm.engine_eval.get_board_visual())
+                        if _fsm.engine_eval.get_evaluation() == {
                             "type": "mate",
                             "value": 0,
                         }:  # Evaluate if there is a checkmate
-                            _fsm.go_to_checkmate()  # Change state
+                            _fsm.go_to_checkmate_state()  # Change state
                         else:
                             _fsm.go_to_human_move_state()  # Change state
                         _board.board_history.append(
@@ -617,7 +689,7 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 if _args.debug:
                     print(f"{cfg.MCB_DEBUG_MSG}event - undo")
                 if _args.debug:
-                    _board.full_display(_fsm.stockfish.get_board_visual())
+                    _board.full_display(_fsm.engine_eval.get_board_visual())
                 _fsm.go_to_undo_move_state()
 
         elif _fsm.is_undo_move_state:
@@ -672,14 +744,18 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                     print(f"{cfg.MCB_DEBUG_MSG}confirm undo move: {_fsm.move_undo}")
                 if _board.is_undo_move_done():  # If the undo move is done
                     del _fsm.moves[-1]  # Delete last move for the engines
-                    _fsm.stockfish.set_position(_fsm.moves)  # Set the moved for eval engine
-                    _fsm.ai.set_position(_fsm.moves)  # Set the moved for ai engine
-                    if len(_fsm.moves) > 0:  # Check if the deleted move was the last one.
+                    _fsm.engine.set_position(_fsm.moves)  # Set the moved for ai engine
+                    _fsm.engine_eval.set_position(
+                        _fsm.moves
+                    )  # Set the moved for eval engine
+                    if (
+                        len(_fsm.moves) > 0
+                    ):  # Check if the deleted move was the last one.
                         _board.set_move_done_leds(_fsm.moves[-1])
                     else:
                         _board.set_leds("")
                     if _args.debug:
-                        _board.full_display(_fsm.stockfish.get_board_visual())
+                        _board.full_display(_fsm.engine_eval.get_board_visual())
                     _fsm.go_to_human_move_state()  # Change state
                 else:
                     if _args.debug:
@@ -722,8 +798,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                 if _args.debug:
                     print(f"{cfg.MCB_DEBUG_MSG}go to init")
-                #_board.remove_button_events()
-                #_board.remove_field_events()
+                # _board.remove_button_events()
+                # _board.remove_field_events()
                 _fsm.go_to_init_state()
 
         # Reset (all buttons pressed)
@@ -737,8 +813,8 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
             if _args.debug:
                 print(f"{cfg.MCB_DEBUG_MSG}resetting")
             _board.set_leds("abcdefgh12345678")
-            #_board.remove_button_events()
-            #_board.remove_field_events()
+            # _board.remove_button_events()
+            # _board.remove_field_events()
             time.sleep(2)
             _fsm.go_to_init_state()
 
