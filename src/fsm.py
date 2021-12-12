@@ -39,6 +39,7 @@ class BoardFsm(StateMachine):
 
     human_vs_ai = True  ### Default mode setting 0: Human vs AI, 1: Human vs. Human
     mode_human_color = "white"  ### Default Human color
+    human_is_white = True
     timer = None
 
     # Initialize the states
@@ -64,12 +65,21 @@ class BoardFsm(StateMachine):
         | undo_move_state.to(init_state)
         | mode_state.to(init_state)
     )
-    go_to_mode_state = init_state.to(mode_state)
-    go_to_human_color_state = mode_state.to(human_color_state)
-    go_to_difficulty_state = human_color_state.to(difficulty_state) | mode_state.to(
-        difficulty_state
+    go_to_mode_state = (
+        init_state.to(mode_state)
+        | human_color_state.to(mode_state)
     )
-    go_to_setup_state = difficulty_state.to(setup_state)
+    go_to_human_color_state = (
+        mode_state.to(human_color_state)
+        | difficulty_state.to(human_color_state)
+    )
+    go_to_difficulty_state = (
+        human_color_state.to(difficulty_state) 
+    )
+    go_to_setup_state = (
+        difficulty_state.to(setup_state)
+        | mode_state.to(setup_state)
+    )
     go_to_ai_move_state = (
         setup_state.to(ai_move_state)
         | human_move_state.to(ai_move_state)
@@ -81,14 +91,17 @@ class BoardFsm(StateMachine):
         | undo_move_state.to(human_move_state)
         | pawn_promotion_state.to(human_move_state)
     )
-    go_to_checkmate_state = human_move_state.to(checkmate_state) | ai_move_state.to(
-        checkmate_state
+    go_to_checkmate_state = (
+        human_move_state.to(checkmate_state) 
+        | ai_move_state.to(checkmate_state)
     )
-    go_to_pawn_promotion_state = human_move_state.to(
-        pawn_promotion_state
-    ) | ai_move_state.to(pawn_promotion_state)
-    go_to_undo_move_state = human_move_state.to(undo_move_state) | ai_move_state.to(
-        undo_move_state
+    go_to_pawn_promotion_state = (
+        human_move_state.to(pawn_promotion_state) 
+        | ai_move_state.to(pawn_promotion_state)
+    )
+    go_to_undo_move_state = (
+        human_move_state.to(undo_move_state) 
+        | ai_move_state.to(undo_move_state)
     )
 
     ai_parameters = cfg.DEFAULT_STOCKFISH_PARAMS
@@ -139,9 +152,11 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 # Init. AI and EVAL engine
                 debug_msg(_args.debug, "setting up engines")
                 _fsm.engine = Stockfish(_args.input)
+                debug_msg(_args.debug, f"{_fsm.engine.get_parameters()}")
                 _fsm.engine_eval = Stockfish(
                     "/home/pi/mChessBoard/src/stockfish-12_linux_x32_armv6"
                 )
+                debug_msg(_args.debug, f"{_fsm.engine_eval.get_parameters()}")
                 # Reset AI move instance
                 _fsm.move_ai = ""
                 # Reset Human move instance
@@ -158,13 +173,13 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
         elif _fsm.is_mode_state:
 
+            """MODE STATE
+            Let the user chose either
+            AI vs Human or
+            Human vs Human
+            """
+                
             if _fsm.first_entry:
-
-                """MODE STATE
-                Let the user chose either
-                AI vs Human or
-                Human vs Human
-                """
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
@@ -173,29 +188,11 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
             if _fsm.human_vs_ai:
 
-                if GPIO.event_detected(cfg.MCB_BUT_BLACK) or GPIO.event_detected(
-                    cfg.MCB_BUT_WHITE
-                ):
-
-                    debug_msg(_args.debug, "human vs ai")
-                    # Human vs AI
-                    _fsm.human_vs_ai = True
-                    # Set LED indicator
-                    _board.set_leds("4")
-
-                elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
-
-                    # Change state
-                    _fsm.go_to_difficulty_state()
-
-            elif not _fsm.human_vs_ai:
-
-                if GPIO.event_detected(cfg.MCB_BUT_BLACK) or GPIO.event_detected(
-                    cfg.MCB_BUT_WHITE
-                ):
+                if GPIO.event_detected(cfg.MCB_BUT_BLACK) \
+                    or GPIO.event_detected(cfg.MCB_BUT_WHITE):
 
                     debug_msg(_args.debug, "human vs human")
-                    # Human vs Human
+                    # Human vs AI
                     _fsm.human_vs_ai = False
                     # Set LED indicator
                     _board.set_leds("5")
@@ -204,6 +201,22 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
 
                     # Change state
                     _fsm.go_to_human_color_state()
+
+            else:
+
+                if GPIO.event_detected(cfg.MCB_BUT_BLACK) \
+                    or GPIO.event_detected(cfg.MCB_BUT_WHITE):
+
+                    debug_msg(_args.debug, "human vs ai")
+                    # Human vs Human
+                    _fsm.human_vs_ai = True
+                    # Set LED indicator
+                    _board.set_leds("4")
+
+                elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
+
+                    # Change state
+                    _fsm.go_to_setup_state()
 
         elif _fsm.is_human_color_state:
 
@@ -216,89 +229,84 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 print(f"STATE: {_fsm.current_state.identifier}")
 
                 # Reset color
-                _fsm.mode_human_color = "white"
+                _fsm.human_is_white = True
                 # Set LED indicator to white
-                _board.set_leds("1234")
+                _board.set_leds("12")
 
-            if _fsm.mode_human_color == "white":
-
-                if GPIO.event_detected(cfg.MCB_BUT_BLACK) or GPIO.event_detected(
-                    cfg.MCB_BUT_WHITE
-                ):
-
-                    _fsm.mode_human_color = "black"  # Human is black
-                    _board.set_leds("5678")  # Set LED indicator to black
-                    print(f"{cfg.MCB_DEBUG_MSG}human is black")
-
-                elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
-
-                    _fsm.go_to_difficulty_state()  # Change state
-
-            elif _fsm.mode_human_color == "black":
+            if _fsm.human_is_white:
 
                 if GPIO.event_detected(cfg.MCB_BUT_BLACK) or GPIO.event_detected(
                     cfg.MCB_BUT_WHITE
                 ):
 
-                    _fsm.mode_human_color = "white"  # Human white
-                    _board.set_leds("1234")  # Set LED indicator to white
-                    print(f"{cfg.MCB_DEBUG_MSG}human is white")
+                    # Change human to black
+                    _fsm.human_is_white = False 
+                    # Set LED indicator to black
+                    _board.set_leds("78")
+                    debug_msg(_args.debug, "human is black")
 
                 elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
 
-                    _fsm.go_to_difficulty_state()  # Change state
+                    # Change state
+                    _fsm.go_to_difficulty_state()  
+
+            elif not _fsm.human_is_white:
+
+                if GPIO.event_detected(cfg.MCB_BUT_BLACK) \
+                    or GPIO.event_detected(cfg.MCB_BUT_WHITE):
+
+                    # Change human to white
+                    _fsm.human_is_white = True
+                    # Set LED indicator to white 
+                    _board.set_leds("12")
+                    debug_msg(_args.debug, "human is white")
+
+                elif GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
+
+                    # Change state
+                    _fsm.go_to_difficulty_state()  
+
+            if GPIO.event_detected(cfg.MCB_BUT_BACK):
+
+                # Change state
+                _fsm.go_to_mode_state()
 
         elif _fsm.is_difficulty_state:
 
-            """! @brief Set the difficulty of the AI"""
+            """DIFFICULTY STATE
+            Set the difficulty of the AI
+            """
 
             if _fsm.first_entry:
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
-                _board.set_difficulty_leds(
-                    _fsm.play_difficulty
-                )  # Set LEDs to default difficulty
+                # Set LEDs to default difficulty
+                _board.set_difficulty_leds(_fsm.play_difficulty)  
 
             if GPIO.event_detected(cfg.MCB_BUT_CONFIRM):
 
-                if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG}confirm ({_fsm.play_difficulty})")
+                debug_msg(_args.debug, "confirm ({_fsm.play_difficulty})")
 
-                _board.set_leds("12345678abcdefgh")  # Turn on all LEDs
-                time.sleep(1)  # Wait a sec
+                # Turn on all LEDs
+                _board.set_leds("12345678abcdefgh")
+                # Wait a sec  
+                time.sleep(1)  
 
-                if _fsm.play_difficulty == 0:  # Use level random mover on difficulty 0
-                    if _args.debug:
-                        print(f"{cfg.MCB_DEBUG_MSG}using Level: {_fsm.play_difficulty}")
-                    # _fsm.ai_parameters.update({"UCI_LimitStrength": "false"})
-                    # _fsm.ai_parameters.update({"Level": _fsm.play_difficulty})
+                # Use level random mover on difficulty 0
+                if _fsm.play_difficulty == 0:  
+                    debug_msg(_args.debug, f"using Level: {_fsm.play_difficulty}")
                     _fsm.engine.set_skill_level(0)
                 else:  # Use a ELO rating
-                    if _args.debug:
-                        print(
-                            f"{cfg.MCB_DEBUG_MSG}using ELO rating: {_fsm.play_difficulty * 100 + 600}"
-                        )
-                    # _fsm.ai_parameters.update({"UCI_LimitStrength": "true"})
-                    # _fsm.ai_parameters.update(
-                    #    {"UCI_Elo": _fsm.play_difficulty * 100 + 600}
-                    # )
-                    # 700 to 2800 (limit here is 1500, enough for me)
+                    debug_msg(_args.debug, f"using ELO rating: {_fsm.play_difficulty * 100 + 600}")
                     _fsm.engine.set_elo_rating(_fsm.play_difficulty * 100 + 600)
 
-                if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG} {_fsm.engine.get_parameters()}")
+                debug_msg(_args.debug, f"{_fsm.engine.get_parameters()}")
 
-                # Init. eval engine
-                # _fsm.stockfish = Stockfish(
-                # "/home/pi/mChessBoard/src/stockfish-12_linux_x32_armv6",
-                # parameters=cfg.DEFAULT_STOCKFISH_PARAMS,
-                # )
-                # if _args.debug:
-                #    print(f"{cfg.MCB_DEBUG_MSG} {_fsm.stockfish.get_parameters()}")
-
+                # Turn off LEDs
                 _board.set_leds("")
 
+                # Change state
                 _fsm.go_to_setup_state()
 
             elif GPIO.event_detected(cfg.MCB_BUT_BLACK):
@@ -306,8 +314,10 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 # Increment difficulty
                 if _fsm.play_difficulty < cfg.MCB_PLAY_MAX_DIFFICULTY:
                     _fsm.play_difficulty = _fsm.play_difficulty + 1
-                if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG}difficulty up: {_fsm.play_difficulty}")
+                
+                debug_msg(_args.debug, f"difficulty up: {_fsm.play_difficulty}")
+                
+                # Set LEDs
                 _board.set_difficulty_leds(_fsm.play_difficulty)
 
             elif GPIO.event_detected(cfg.MCB_BUT_WHITE):
@@ -315,24 +325,29 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 # Decrement difficulty
                 if _fsm.play_difficulty > cfg.MCB_PLAY_DIFF_MIN:
                     _fsm.play_difficulty = _fsm.play_difficulty - 1
-                if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG}difficulty down: {_fsm.play_difficulty}")
+                
+                debug_msg(_args.debug, f"difficulty down: {_fsm.play_difficulty}")
+                
+                # Set LEDs
                 _board.set_difficulty_leds(_fsm.play_difficulty)
+
+            elif GPIO.event_detected(cfg.MCB_BUT_BACK):
+
+                # Change state
+                _fsm.go_to_human_color_state()
 
         elif _fsm.is_setup_state:
 
-            """! @brief     Setting up the _board
-
-            @info   Turn on LEDs for columns which is correctly setup
+            """SETUP STATE
+            Turn on LEDs for columns which is correctly setup
             """
 
             if _fsm.first_entry:
 
                 print(f"STATE: {_fsm.current_state.identifier}")
 
-                # _board.add_button_events()  # Add button int. events
-                # _board.add_field_events()  # Add field int. events
-                _board.set_setup_leds()  # Turn on initial setup LEDs
+                # Turn on initial setup LEDs
+                _board.set_setup_leds()
 
             # React on field events
             if (
@@ -341,34 +356,46 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                 or GPIO.event_detected(cfg.MCB_ROW_EF_IO)
                 or GPIO.event_detected(cfg.MCB_ROW_GH_IO)
             ):
+                # Update setup LEDs
                 _board.set_setup_leds()
 
             # If board is setup correctly
             elif _board.board_current == _board.board_setup:
 
-                if _args.debug:
-                    print(f"{cfg.MCB_DEBUG_MSG}_board is set up")
+                debug_msg(_args.debug, "board is set up")
 
-                _board.set_leds("abcdefgh12345678")  # Turn on all LEDs
-                _board.board_prev = (
-                    _board.board_current
-                )  # Set previous board to current board
-                _board.board_history = []  # Reset undo history
+                # Turn on all LEDs
+                _board.set_leds("abcdefgh12345678")
+                # Set previous board to current board
+                _board.board_prev = (_board.board_current)
+                # Reset undo history 
+                _board.board_history = []  
                 _board.board_history.append(_board.board_current)
-                time.sleep(1)  # Wait a sec
-                _board.set_leds("")  # Turn off the LEDs
+                # Wait a sec
+                time.sleep(1)
+                # Turn off the LEDs
+                _board.set_leds("")
+                
                 try:
+                    # Connect to webserver if it is running
                     _fsm.sio.connect("http://localhost", wait_timeout=10)
+                    # Emit stat position to webserver
                     _fsm.sio.emit(
                         "move_event", {"data": str(_fsm.engine_eval.get_fen_position())}
                     )
                 except:
                     print("Connection failed")
-                _fsm.go_to_human_move_state()  # Change state
+                
+                # Change state
+                _fsm.go_to_human_move_state()  
 
             elif GPIO.event_detected(cfg.MCB_BUT_BACK):
 
-                _fsm.go_to_difficulty_state()  # Change state
+                # Change state
+                if _fsm.human_vs_ai:
+                    _fsm.go_to_difficulty_state()
+                else:
+                    _fsm.go_to_mode_state()
 
         elif _fsm.is_human_move_state:
 
@@ -465,7 +492,10 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                         _fsm.moves.append(
                             _fsm.move_human
                         )  # Add the move to the moves list
-                        _fsm.engine.set_position(_fsm.moves)  # Set position in AI
+                        # Set position in AI
+                        _fsm.engine.set_position(_fsm.moves)  
+                        # Set position in Eval
+                        _fsm.engine_eval.set_position(_fsm.moves) 
                         try:
                             _fsm.sio.emit(
                                 "move_event",
@@ -473,9 +503,7 @@ def run(_fsm: BoardFsm, _args: list(), _board: Board):
                             )
                         except:
                             print("Emitting failed")
-                        _fsm.engine_eval.set_position(
-                            _fsm.moves
-                        )  # Set position in Eval
+                         
                         _fsm.move_human = ""  # Reset human move
                         if _args.debug:
                             _board.full_display(_fsm.engine_eval.get_board_visual())
