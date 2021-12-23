@@ -10,7 +10,7 @@ After=multi-user.target
 
 Type=idle
 
-ExecStart=/home/pi/mChessBoard/src/venv/bin/python /home/pi/mChessBoard/src/mChessBoard.py --auto_confirm
+ExecStart=/home/pi/mChessBoard/src/venv/bin/python /home/pi/mChessBoard/src/chessboard.py --auto_confirm
 
 StandardOutput=/home/pi/mChessBoard/output.log
 

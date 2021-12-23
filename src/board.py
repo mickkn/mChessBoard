@@ -8,7 +8,7 @@ from pcf8575 import PCF8575  # https://pypi.org/project/pcf8575/
 import RPi.GPIO as GPIO
 import config as cfg
 import time
-
+import sys
 
 class Board():
 
@@ -48,9 +48,6 @@ class Board():
 
         # Set all inputs high on init
         self.pcf_row_ab.port = self.pcf_row_cd.port = self.pcf_row_ef.port = self.pcf_row_gh.port = [True] * 16
-
-        # Cleanup all GPIO before init
-        GPIO.cleanup()
         
         # Setup GPIO pin mode
         GPIO.setmode(GPIO.BCM)
@@ -64,31 +61,11 @@ class Board():
         self.field_events_active = False
         self.button_events_active = False
 
-        GPIO.add_event_detect(cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-
-        GPIO.add_event_detect(cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-        GPIO.add_event_detect(cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-
     def _button_callback(self, channel):
         
         """! Event callback to save events """
 
         if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}event: {channel}")
-
-    def event_detected(self, channel):
-
-        """! My own event detected method, since the GPIO.RPi sucks """
-
-        if channel in self.events:
-            self.events.remove(channel)
-            return True
-
-        return False
 
     def add_button_events(self):
 
@@ -97,11 +74,14 @@ class Board():
         # Add button events
         if not self.button_events_active:
             if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add button events")
-            GPIO.add_event_detect(cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-            GPIO.add_event_detect(cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-            GPIO.add_event_detect(cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-            GPIO.add_event_detect(cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
-            self.button_events_active = True
+            try:
+                GPIO.add_event_detect(cfg.MCB_BUT_WHITE, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+                GPIO.add_event_detect(cfg.MCB_BUT_CONFIRM, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+                GPIO.add_event_detect(cfg.MCB_BUT_BACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+                GPIO.add_event_detect(cfg.MCB_BUT_BLACK, GPIO.FALLING, callback=self._button_callback, bouncetime=cfg.MCB_BUT_DEBOUNCE)
+                self.button_events_active = True
+            except:
+                sys.exit(-1)
 
     def remove_button_events(self):
 
@@ -122,10 +102,13 @@ class Board():
         # Add field events
         if not self.field_events_active:
             if self.args.debug: print(f"{cfg.MCB_DEBUG_MSG}add field events")
-            GPIO.add_event_detect(cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-            GPIO.add_event_detect(cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-            GPIO.add_event_detect(cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
-            GPIO.add_event_detect(cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+            try:
+                GPIO.add_event_detect(cfg.MCB_ROW_AB_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+                GPIO.add_event_detect(cfg.MCB_ROW_CD_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+                GPIO.add_event_detect(cfg.MCB_ROW_EF_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+                GPIO.add_event_detect(cfg.MCB_ROW_GH_IO, GPIO.FALLING, bouncetime=cfg.MCB_FIELD_DEBOUNCE)
+            except:
+                sys.exit(-1)
             self.field_events_active = True
 
 
@@ -209,6 +192,8 @@ class Board():
         @return Changed field value
         """
 
+        start = time.time()
+
         # Read the fields
         self.read_fields()
 
@@ -225,6 +210,10 @@ class Board():
 
         if field_value != "":
             self.board_prev = self.board_current
+
+        end = time.time()
+
+        print(f"The time of get_field_event() : {end-start}")
 
         return field_value
 

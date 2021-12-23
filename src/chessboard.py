@@ -1,7 +1,8 @@
 import argparse
 import sys
 import RPi.GPIO as GPIO
-import fsm
+import state_machine
+import state_machine_impl
 import board
 from signal import signal, SIGINT
 
@@ -59,11 +60,12 @@ if __name__ == "__main__":
     args = parser()
 
     # Create a FSM object
-    statemachine = fsm.BoardFsm(args)
+    statemachine = state_machine_impl.BoardFsm(args)
 
     # Create a Board object
     chess_board = board.Board(args)
 
     while True:
-        fsm.run(statemachine, args, chess_board)
+        if state_machine.run(statemachine, args, chess_board) is not None:
+            break
     
