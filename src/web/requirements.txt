@@ -1,0 +1,4 @@
+python-statemachine==0.8.0
+flask==2.0.2
+python-chess==1.999
+flask-socketio
