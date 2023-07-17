@@ -1,50 +1,78 @@
 
 
 @font-face {
-    font-family: 'chesspirate';
-    src: url('ChessSansPiratf.woff');
+  font-family: 'chesspirate';
+  src: url('ChessSansPiratf.woff');
 }
 
 
 /* Overwrite .card class properties */
 
 .card {
-    border-radius: 0 !important;
+  border-radius: 0 !important;
 }
 
 .card-body {
-    padding: 0 !important;
+  padding: 0 !important;
 }
 
 /* Main app styles*/
 
 #reset, #undo, #redo {
-    cursor: pointer;
-    font-size: 120%;
+  cursor: pointer;
+  font-size: 120%;
 }
 
 /* applying chess font to moves in table */
 
 tbody#pgn-moves {
-    font-family: 'chesspirate', sans-serif;
+  font-family: 'chesspirate', sans-serif;
 }
 
 
 /* Overflow moves tables */
 .card-body#game-moves {
-    overflow-y: scroll;
-    max-height: 460px;
+  overflow-y: scroll;
+  max-height: 460px;
 }
 
 tbody tr td:hover {
-    background-color: #20a4f3;
-    cursor: pointer;
+  background-color: #20a4f3;
+  cursor: pointer;
 }
 
 img[class^="piece"] {
-    cursor: pointer;
+  cursor: pointer;
 }
 
 .game-over {
-    color: #ea1744;
+  color: #ea1744;
+}
+
+/* If the screen size is 601px wide or more */
+@media screen and (min-width: 992px) {
+
+}
+
+/* If the screen size is min. 601px wide or max. 991px */
+@media screen and (max-width: 991px) {
+
+}
+
+/* If the screen size is 600px wide or less */
+@media screen and (max-width: 600px) {
+
+}
+
+/* Webkit-based browsers (Google Chrome, Safari) */
+::-webkit-scrollbar {
+  width: 20px;
+}
+
+::-webkit-scrollbar-track {
+  background: #4444;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #111111;
 }

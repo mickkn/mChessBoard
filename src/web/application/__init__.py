@@ -9,12 +9,12 @@
   :Author:      Mick Kirkegaard, Circle Consult ApS.
 """
 from flask import Flask
+from flask_socketio import SocketIO
 
 from application.config import Config
 
-from flask_socketio import SocketIO
-
 socketio = SocketIO()
+
 
 def create_app(config_class=Config):
     """Returns instantiated flask application."""
@@ -31,7 +31,7 @@ def create_app(config_class=Config):
     # Initialize flask extensions.
     socketio.init_app(app)
 
-    from web.application.main import bp as main_bp
+    from application.main import bp as main_bp
     app.register_blueprint(main_bp)
 
     # Return app instance.

@@ -8,21 +8,39 @@
   :Date:        28-05-2023
   :Author:      Mick Kirkegaard, Circle Consult ApS.
 """
+import os
 from flask import (
     render_template,
     request,
     session,
-    copy_current_request_context
+    copy_current_request_context,
+    send_from_directory,
+    current_app,
 )
 from flask_socketio import emit, disconnect
 
-from web.application import socketio
-from web.application.main import bp
+from application import socketio
+from application.main import bp
 
 
 @bp.route('/')
 def index():
-    return render_template('../../templates/index.html', async_mode=socketio.async_mode)
+    return render_template('index.html', async_mode=socketio.async_mode)
+
+
+@bp.route("/favicon.ico")
+def favicon():
+    """Function that serves the favicon file."""
+    return send_from_directory(
+        os.path.join(current_app.root_path, "static"),
+        "img/apple-touch-icon.png",
+        mimetype="image/vnd.microsoft.icon",
+    )
+
+
+@bp.route('/img/<path:filename>')
+def serve_image(filename):
+    return send_from_directory(os.path.join(current_app.root_path, "static", "img"), filename)
 
 
 @socketio.event
@@ -46,7 +64,7 @@ def disconnect_request():
     session['receive_count'] = session.get('receive_count', 0) + 1
     # for this emit we use a callback function
     # when the callback function is invoked we know that the message has been
-    # received and it is safe to disconnect
+    # received, and it is safe to disconnect
     emit('my_response',
          {'data': 'Disconnected!', 'count': session['receive_count']},
          callback=can_disconnect)

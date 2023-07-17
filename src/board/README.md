@@ -1,0 +1,1 @@
+This is GPIO dependent and is only supposed to be running on a Raspberry Pi.
