@@ -12,6 +12,7 @@
 
 import os
 
+
 class Config(object):
 
     #: Key used for encryption, has to be set to access the session dictionary.

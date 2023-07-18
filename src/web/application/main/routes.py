@@ -19,7 +19,7 @@ from flask import (
 )
 from flask_socketio import emit, disconnect
 
-from application import socketio
+from application import socketio, board
 from application.main import bp
 
 
@@ -68,6 +68,26 @@ def disconnect_request():
     emit('my_response',
          {'data': 'Disconnected!', 'count': session['receive_count']},
          callback=can_disconnect)
+
+
+@socketio.event
+def board_move(message):
+    # move done via electronic chess board.
+    emit('board_move', {'data': message['data']}, broadcast=True)
+
+
+@bp.route('/app_move', methods=['GET', 'POST'])
+def app_move():
+    move = request.args.get('move', 0, type=str)
+    print(move)
+    return move
+
+
+@socketio.event
+def engine_move(message):
+    # move done via chess engine.
+    print(board.board_fen())
+    emit('ai_move', {'data': message['data']}, broadcast=True)
 
 
 @socketio.event

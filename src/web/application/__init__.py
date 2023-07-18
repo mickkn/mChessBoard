@@ -13,7 +13,14 @@ from flask_socketio import SocketIO
 
 from application.config import Config
 
+import chess.engine
+
 socketio = SocketIO()
+
+engine = chess.engine.SimpleEngine.popen_uci(r"C:\Repos\mChessBoard\src\web\application\static\bin\stockfish-windows-x86-64-avx2.exe")
+board = chess.Board("1k1r4/pp1b1R2/3q2pp/4p3/2B5/4Q3/PPP2B2/2K5 b - - 0 1")
+limit = chess.engine.Limit(time=2.0)
+engine.play(board, limit)  # doctest: +ELLIPSIS
 
 
 def create_app(config_class=Config):

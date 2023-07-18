@@ -1,4 +1,6 @@
 function onDrop(source, target, piece, orientation) {
+
+    // see if the move is legal
     let pn = piece.includes('b')
         ? piece.toUpperCase().substring(1, 2)
         : piece.substring(1, 2);
@@ -11,7 +13,7 @@ function onDrop(source, target, piece, orientation) {
         ? target.substring(0, 1) + '8Q'
         : move; // pawn promotion
 
-    $.get('/move', {move: move}, function(data) {
+    $.get('/app_move', {move: move}, function(data) {
         console.log(data);
         //document.querySelector('tbody#pgn-moves');
         //document.querySelector('#pgn').innerText = data.pgn;
@@ -89,7 +91,7 @@ $('#redo').click(function() {
 });
 
 let cfg = {
-    position: '{{ fen }}',
+    position: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR',
     showNotation: true,
     draggable: true,
     onDragStart: onDragStart,
